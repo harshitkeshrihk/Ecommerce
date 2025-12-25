@@ -2,8 +2,12 @@ package com.example.vishnu.viewModels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vishnu.model.Order
+import com.example.vishnu.model.OrderItemDetail
 import com.example.vishnu.repository.ProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.postgrest.query.Order as SupabaseOrder
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -25,6 +29,12 @@ class ProfileViewModel @Inject constructor(
 
     private val _updateStatus = MutableStateFlow<String?>(null) // Message for Toast
     val updateStatus = _updateStatus.asStateFlow()
+
+    private val _activeOrders = MutableStateFlow<List<Order>>(emptyList())
+    val activeOrders = _activeOrders.asStateFlow()
+
+    private val _pastOrders = MutableStateFlow<List<Order>>(emptyList())
+    val pastOrders = _pastOrders.asStateFlow()
 
     init {
         fetchProfile()
@@ -58,6 +68,23 @@ class ProfileViewModel @Inject constructor(
             }
             _isLoading.value = false
         }
+    }
+
+    fun loadOrderData() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            // Load both lists in parallel
+            val active = async { repository.getActiveOrders() }
+            val past = async { repository.getPastOrders() }
+
+            _activeOrders.value = active.await()
+            _pastOrders.value = past.await()
+            _isLoading.value = false
+        }
+    }
+
+    suspend fun getOrderItems(orderId: Long): List<OrderItemDetail> {
+        return repository.getOrderItems(orderId)
     }
 
     // Clear message after showing Toast

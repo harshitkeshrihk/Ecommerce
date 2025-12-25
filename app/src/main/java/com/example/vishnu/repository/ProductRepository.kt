@@ -1,8 +1,11 @@
 package com.example.vishnu.repository
 
+import android.util.Log
 import com.example.vishnu.model.Product
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 class ProductRepository @Inject constructor(
@@ -32,6 +35,19 @@ class ProductRepository @Inject constructor(
                 .decodeSingleOrNull<Product>()
         } catch (e: Exception) {
             null
+        }
+    }
+
+    suspend fun upsertProduct(product: Product): Boolean = withContext(Dispatchers.IO) {
+        try {
+            supabase.postgrest["products"].upsert(product) {
+                // If ID matches, it updates. Otherwise, it inserts.
+                onConflict = "id"
+            }
+            true
+        } catch (e: Exception) {
+            Log.e("Repo", "Error saving product", e)
+            false
         }
     }
 

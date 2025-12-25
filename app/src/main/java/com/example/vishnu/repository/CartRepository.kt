@@ -4,6 +4,9 @@ import android.util.Log
 import com.example.vishnu.model.CartItem
 import com.example.vishnu.model.CartRequest
 import com.example.vishnu.model.CartResponse
+import com.example.vishnu.model.OrderItemRequest
+import com.example.vishnu.model.OrderRequest
+import com.example.vishnu.model.OrderResponse
 import com.example.vishnu.model.Product
 import com.example.vishnu.model.toCartItem
 import io.github.jan.supabase.auth.Auth
@@ -29,11 +32,11 @@ class CartRepository @Inject constructor(
     private val _cartItems = MutableStateFlow<List<CartItem>>(emptyList())
     val cartItems = _cartItems.asStateFlow()
 
-    suspend fun fetchCartItems() = withContext(Dispatchers.IO){
+    suspend fun fetchCartItems(): List<CartItem> = withContext(Dispatchers.IO){
         if(auth.currentUserOrNull() == null){
             Log.w("CartRepo", "User not logged in, skipping cart fetch.")
             _cartItems.value = emptyList()
-            return@withContext
+            return@withContext emptyList()
         }
         try {
             // "select" with joined table: products(*) fetches the full product details
@@ -41,9 +44,13 @@ class CartRepository @Inject constructor(
                 .select(columns = Columns.raw("id, quantity, product:products(*)"))
                 .decodeList<CartResponse>()
 
-            _cartItems.value = response.map { it.toCartItem() }
+            val items = response.map { it.toCartItem() }
+            _cartItems.value = items
+
+            return@withContext items
         } catch (e: Exception) {
             Log.e("CartRepo", "Error fetching cart", e)
+            return@withContext emptyList()
         }
     }
 
@@ -142,6 +149,77 @@ class CartRepository @Inject constructor(
             }
         }
     }
+
+    suspend fun createOrder(
+        paymentId: String,
+        amount: Double,
+        address: String,
+        cartItems: List<CartItem>
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val userId = auth.currentUserOrNull()?.id ?: return@withContext false
+            Log.d("CartRepo", "Step 0: Starting Order for User: $userId")
+
+            // 1. Insert Parent Order
+            val orderRequest = OrderRequest(
+                userId = userId,
+                paymentId = paymentId,
+                totalAmount = amount,
+                address = address
+            )
+
+            // Get the new ID back
+            val orderResponse = postgrest["orders"]
+                .insert(orderRequest) { select() }
+                .decodeSingle<OrderResponse>()
+
+            val newOrderId = orderResponse.id
+            Log.d("CartRepo", "Step 1 Success: Created Order #$newOrderId")
+
+            // 2. Prepare Child Items
+            val orderItemsList = cartItems.map { item ->
+                Log.d("CartRepo", "Preparing Item: ${item.product.name} (ID: ${item.product.id})")
+                OrderItemRequest(
+                    orderId = newOrderId,
+                    productId = item.product.id,
+                    productName = item.product.name,
+                    quantity = item.quantity,
+                    price = item.product.priceRetail
+                )
+            }
+
+            // 3. Insert Child Items
+            try {
+                postgrest["order_items"].insert(orderItemsList)
+                Log.d("CartRepo", "Step 3 Success: All items inserted!")
+                true
+            } catch (insertError: Exception) {
+                // THIS IS THE CRITICAL LOG
+                Log.e("CartRepo", "Step 3 FAILED! DB Rejected items. Cause: ${insertError.message}")
+
+                // Optional: Delete the empty order so we don't have ghosts
+                // postgrest["orders"].delete { filter { eq("id", newOrderId) } }
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("CartRepo", "Failed to create order", e)
+            false
+        }
+    }
+
+    suspend fun clearCart() = withContext(Dispatchers.IO) {
+        try {
+            // RLS ensures we only delete our own items
+            postgrest["cart_items"].delete {
+                filter { neq("id", -1) }
+            }
+            fetchCartItems()
+        } catch (e: Exception) {
+            Log.e("CartRepo", "Failed to clear cart", e)
+        }
+    }
+
+
 
 
 }

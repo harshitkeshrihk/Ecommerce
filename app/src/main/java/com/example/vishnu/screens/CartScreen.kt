@@ -40,10 +40,13 @@ val WhatsAppGreen = Color(0xFF25D366)
 @Composable
 fun CartScreen(
     onBackClick: () -> Unit,
+    onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit,
     viewModel: CartViewModel = hiltViewModel()
 ) {
     val cartItems by viewModel.cartItems.collectAsState()
     val totalPrice by viewModel.totalPrice.collectAsState()
+    val email by viewModel.userEmail.collectAsState()
+    val phone by viewModel.userPhone.collectAsState()
     val context = LocalContext.current
 
 //    LaunchedEffect(Unit) {
@@ -73,7 +76,7 @@ fun CartScreen(
             if (cartItems.isNotEmpty()) {
                 CartSummaryBottomBar(
                     totalPrice = totalPrice,
-                    onCheckout = { viewModel.checkoutOnWhatsApp(context) }
+                    onCheckout = { onInitiatePayment(totalPrice,email,phone) }
                 )
             }
         },
@@ -302,7 +305,7 @@ fun CartSummaryBottomBar(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Checkout on WhatsApp",
+                    text = "Buy Now",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White

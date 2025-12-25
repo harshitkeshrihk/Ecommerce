@@ -46,7 +46,7 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Loading
             try {
                 repository.signIn(email.value, password.value)
-                dataStoreManager.saveLoginState(true)
+                dataStoreManager.saveUserSession(true,isAdmin(email.value))
                 _authState.value = AuthState.Success("Welcome back!")
             } catch (e: Exception) {
                 _authState.value = AuthState.Error(e.message ?: "Login failed")
@@ -60,6 +60,16 @@ class AuthViewModel @Inject constructor(
             dataStoreManager.clearSession() // Clear local flag
         }
     }
+
+    fun isAdmin(email: String?): Boolean {
+        return Constants.ADMIN_EMAILS.contains(email)
+    }
+}
+
+object Constants {
+    val ADMIN_EMAILS = listOf(
+        "harshitkeshrihk@gmail.com",
+    )
 }
 
 // Simple State Wrapper

@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Verified
@@ -35,12 +36,15 @@ import com.example.vishnu.viewModels.ProductDetailViewModel
 fun ProductDetailScreen(
     productId: String,
     onBackClick: () -> Unit,
+    onEditClick:() -> Unit,
     viewModel: ProductDetailViewModel = hiltViewModel()
 ) {
     // In a real app, we would fetch the product from a ViewModel using the ID.
     // For now, we'll just grab the first mock product to test the UI.
     val product by viewModel.product.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+
+    val isAdmin by viewModel.isAdmin.collectAsState()
 
     // 1. TRIGGER FETCH ON LAUNCH
     LaunchedEffect(productId) {
@@ -51,6 +55,16 @@ fun ProductDetailScreen(
     val exoPlayer = viewModel.player
 
     Scaffold(
+        floatingActionButton = {
+            if (isAdmin) {
+                FloatingActionButton(
+                    onClick = onEditClick,
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit Product", tint = Color.White)
+                }
+            }
+        },
         bottomBar = {
             // Sticky Bottom Bar for Action
             Surface(
@@ -284,5 +298,5 @@ fun ProductSpecRow(label: String, value: String?) {
 @Preview(showBackground = true)
 @Composable
 fun DetailPreview() {
-    ProductDetailScreen(productId = "1", onBackClick = {})
+    ProductDetailScreen(productId = "1", onBackClick = {},{})
 }

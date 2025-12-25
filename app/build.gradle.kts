@@ -93,4 +93,16 @@ dependencies {
     implementation("io.ktor:ktor-client-android:3.0.1")
 
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    // Location Services
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+
+    // Permission Handling in Compose (Makes life much easier)
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+
+    implementation("androidx.activity:activity-compose:1.8.0")
+
+    implementation("com.razorpay:checkout:1.6.33")
 }

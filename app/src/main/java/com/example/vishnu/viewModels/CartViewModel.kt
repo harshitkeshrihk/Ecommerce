@@ -3,13 +3,20 @@ package com.example.vishnu.viewModels
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vishnu.model.CartItem
 import com.example.vishnu.repository.CartRepository
+import com.example.vishnu.repository.ProfileRepository
+import com.example.vishnu.utils.LocationManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.jan.supabase.auth.Auth
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -17,16 +24,33 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CartViewModel @Inject constructor(
-    private val cartRepository: CartRepository
+    private val cartRepository: CartRepository,
+    private val profileRepository: ProfileRepository, // Inject Profile Repo
+    private val auth: Auth,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     // 1. Observe the Repository directly
     val cartItems: StateFlow<List<CartItem>> = cartRepository.cartItems
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading = _isLoading.asStateFlow()
+
+    private val _userLocation = MutableStateFlow("Fetching location...")
+    val userLocation = _userLocation.asStateFlow()
+
+    private val _userEmail = MutableStateFlow("")
+    val userEmail = _userEmail.asStateFlow()
+
+    private val _userPhone = MutableStateFlow("")
+    val userPhone = _userPhone.asStateFlow()
+
     init {
         viewModelScope.launch {
             cartRepository.fetchCartItems()
+            fetchLocation()
+            fetchUserDetails()
         }
     }
 
@@ -39,6 +63,23 @@ class CartViewModel @Inject constructor(
         viewModelScope.launch {
             cartRepository.fetchCartItems()
         }
+    }
+
+    private suspend fun fetchUserDetails() {
+        // 1. Get Email directly from Auth User Session
+        val currentUser = auth.currentUserOrNull()
+        _userEmail.value = currentUser?.email ?: ""
+
+        // 2. Get Phone: Try Auth first, then fallback to Profile Table
+        var phone = currentUser?.phone
+
+        if (phone.isNullOrBlank()) {
+            // If Auth doesn't have phone, check the 'profiles' table
+            val profile = profileRepository.getUserProfile()
+            phone = profile?.phoneNumber
+        }
+
+        _userPhone.value = phone ?: ""
     }
 
     // 3. Actions
@@ -60,7 +101,41 @@ class CartViewModel @Inject constructor(
         }
     }
 
+    fun onPaymentSuccess(paymentId: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
 
+            val freshItems: List<CartItem> =  cartRepository.fetchCartItems()
+            var freshCartPrice: Double = 0.0
+            freshItems.forEach { items ->
+                freshCartPrice += items.product.priceRetail * items.quantity
+            }
+
+            val profile = profileRepository.getUserProfile()
+            val address = profile?.address ?: "AddressNotProvided"
+
+            val success = cartRepository.createOrder(
+                paymentId = paymentId,
+                amount = freshCartPrice,
+                address = address,
+                cartItems = freshItems
+            )
+
+            if (success) {
+                cartRepository.clearCart()
+                // You can expose a state here to Navigate to "Order Success Screen"
+            }
+            _isLoading.value = false
+        }
+    }
+
+    fun fetchLocation() {
+        viewModelScope.launch {
+            val locationManager = LocationManager(context)
+            val address = locationManager.getCurrentAddress()
+            _userLocation.value = address ?: "Location Unavailable"
+        }
+    }
 
     // 4. The WhatsApp Checkout Logic
     fun checkoutOnWhatsApp(context: Context) {
@@ -100,4 +175,6 @@ class CartViewModel @Inject constructor(
             context.startActivity(browserIntent)
         }
     }
+
+
 }

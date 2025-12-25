@@ -22,12 +22,20 @@ class DataStoreManager @Inject constructor(
 
     companion object {
         val IS_LOGGED_IN_KEY = booleanPreferencesKey("is_logged_in")
+        val IS_ADMIN_KEY = booleanPreferencesKey("is_admin")
     }
 
     // Save Login State
-    suspend fun saveLoginState(isLoggedIn: Boolean) {
+//    suspend fun saveLoginState(isLoggedIn: Boolean) {
+//        context.dataStore.edit { preferences ->
+//            preferences[IS_LOGGED_IN_KEY] = isLoggedIn
+//        }
+//    }
+
+    suspend fun saveUserSession(isLoggedIn: Boolean, isAdmin: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[IS_LOGGED_IN_KEY] = isLoggedIn
+            preferences[IS_ADMIN_KEY] = isAdmin
         }
     }
 
@@ -35,6 +43,11 @@ class DataStoreManager @Inject constructor(
     val isLoggedIn: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[IS_LOGGED_IN_KEY] ?: false // Default to false
+        }
+
+    val isAdmin: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[IS_ADMIN_KEY] ?: false // Default to false (Customer)
         }
 
     // Clear Data (Useful for Logout)

@@ -1,9 +1,11 @@
 package com.example.vishnu
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -26,32 +28,85 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.vishnu.screens.AddEditProductScreen
+import com.example.vishnu.screens.AdminDashboardScreen
 import com.example.vishnu.screens.AuthScreen
 import com.example.vishnu.screens.CartScreen
 import com.example.vishnu.screens.CatalogScreen
 import com.example.vishnu.screens.ProductDetailScreen
 import com.example.vishnu.screens.ProfileScreen
 import com.example.vishnu.ui.theme.VishnuTheme
+import com.example.vishnu.utils.DataStoreManager
+import com.example.vishnu.viewModels.AuthViewModel
+import com.example.vishnu.viewModels.CartViewModel
+import com.example.vishnu.viewModels.Constants.ADMIN_EMAILS
 import com.example.vishnu.viewModels.MainViewModel
+import com.razorpay.Checkout
+import com.razorpay.PaymentData
+import com.razorpay.PaymentResultWithDataListener
 import dagger.hilt.android.AndroidEntryPoint
+import org.json.JSONObject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
+
+    private val cartViewModel: CartViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        Checkout.preload(applicationContext)
+
         enableEdgeToEdge()
         setContent {
-            VishnuCrockeryApp()
+            VishnuCrockeryApp(
+                onInitiatePayment = { amount, email, phone ->
+                    startPayment(amount, email, phone)
+                }
+            )
         }
     }
+    private fun startPayment(amount: Double, email: String, phone: String) {
+        // Real Razorpay Code
+        val checkout = Checkout()
+        checkout.setKeyID("rzp_test_RvAYVqnRum5bKG") // Replace this!
+        try {
+            val options = JSONObject()
+            options.put("name", "Vishnu Crockery")
+            options.put("description", "Payment for Order")
+            options.put("currency", "INR")
+            options.put("amount", (amount * 100).toInt()) // Paise
+            options.put("prefill.email", email)
+            options.put("prefill.contact", phone)
+            checkout.open(this, options)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onPaymentSuccess(razorpayPaymentID: String?, paymentData: PaymentData?) {
+        Toast.makeText(this, "Payment Successful!", Toast.LENGTH_SHORT).show()
+        if (razorpayPaymentID != null) {
+            cartViewModel.onPaymentSuccess(razorpayPaymentID)
+        }
+    }
+
+    override fun onPaymentError(code: Int, response: String?, paymentData: PaymentData?) {
+        Toast.makeText(this, "Payment Failed: $response", Toast.LENGTH_SHORT).show()
+    }
+
 }
 
 @Composable
 fun VishnuCrockeryApp(
-    viewModel: MainViewModel = hiltViewModel()
+    viewModel: MainViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
+    onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit
 ) {
     val navController = rememberNavController()
     val startDestination by viewModel.startDestination.collectAsState()
+
+    val isAdmin by viewModel.isAdmin.collectAsState()
 
     if(startDestination == null){
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -63,9 +118,14 @@ fun VishnuCrockeryApp(
             composable("auth_screen") {
                 AuthScreen(
                     onAuthSuccess = {
-                        // When login succeeds, pop Auth and go to Home
-                        navController.navigate("catalog") {
-                            popUpTo("auth_screen") { inclusive = true }
+                       if(isAdmin){
+                            navController.navigate("admin_dashboard") {
+                                popUpTo("auth_screen") { inclusive = true }
+                            }
+                        } else {
+                            navController.navigate("catalog") {
+                                popUpTo("auth_screen") { inclusive = true }
+                            }
                         }
                     }
                 )
@@ -106,21 +166,61 @@ fun VishnuCrockeryApp(
                 val productId = backStackEntry.arguments?.getString("productId") ?: "1"
                 ProductDetailScreen(
                     productId = productId,
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack()},
+                    onEditClick = {
+                        navController.navigate("add_edit_product?productId=${productId}")
+                    }
                 )
             }
 
             composable("cart") {
                 CartScreen(
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack() },
+                    onInitiatePayment = onInitiatePayment
                 )
             }
 
             composable("profile") {
                 ProfileScreen(
-                    onBackClick = { navController.popBackStack() }
+                    onLogoutClick = {
+                        authViewModel.onSignOut()
+                        navController.navigate("auth_screen") {
+                            // "0" means the root of the graph. This clears AdminDashboard, Catalog, EVERYTHING.
+                            popUpTo(0) {
+                                inclusive = true
+                            }
+                            launchSingleTop = true
+                        }
+                    },
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
                 )
             }
+
+            composable("admin_dashboard") {
+                AdminDashboardScreen(
+                    onBack = { navController.popBackStack() },
+                    // This creates a NEW product, so we don't pass an ID
+                    onAddProductClick = {
+                        navController.navigate("add_edit_product")
+                    },
+                    onGoToStoreClick = {
+                        navController.navigate("catalog")
+                    }
+                )
+            }
+
+            composable(
+                route = "add_edit_product?productId={productId}",
+                arguments = listOf(navArgument("productId") { nullable = true })
+            ) {
+                AddEditProductScreen(
+                    productId = it.arguments?.getString("productId"),
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
         }
     }
 }

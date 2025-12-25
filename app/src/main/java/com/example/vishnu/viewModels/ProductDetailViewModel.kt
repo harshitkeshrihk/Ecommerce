@@ -7,10 +7,13 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.example.vishnu.model.Product
 import com.example.vishnu.repository.CartRepository
 import com.example.vishnu.repository.ProductRepository
+import com.example.vishnu.utils.DataStoreManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -18,7 +21,8 @@ import javax.inject.Inject
 class ProductDetailViewModel @Inject constructor(
     val player: ExoPlayer, // <--- Hilt injects this automatically!
     private val cartRepository: CartRepository,
-    private val productRepository: ProductRepository
+    private val productRepository: ProductRepository,
+    private val dataStoreManager: DataStoreManager
 ) : ViewModel() {
 
     private val _product = MutableStateFlow<Product?>(null)
@@ -26,6 +30,9 @@ class ProductDetailViewModel @Inject constructor(
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    val isAdmin = dataStoreManager.isAdmin
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     // Prepare the video (Safe to call multiple times)
     fun initializePlayer(videoUrl: String) {
