@@ -20,3 +20,7 @@ fun formatIsoDate(isoString: String): String {
         isoString // Fallback if parsing fails
     }
 }
+
+fun last6Digits(value: Long): Long {
+    return kotlin.math.abs(value) % 1_000_000
+}

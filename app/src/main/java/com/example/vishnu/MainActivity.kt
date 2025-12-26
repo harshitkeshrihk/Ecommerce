@@ -105,7 +105,6 @@ fun VishnuCrockeryApp(
 ) {
     val navController = rememberNavController()
     val startDestination by viewModel.startDestination.collectAsState()
-
     val isAdmin by viewModel.isAdmin.collectAsState()
 
     if(startDestination == null){
@@ -114,7 +113,6 @@ fun VishnuCrockeryApp(
         }
     }else {
         NavHost(navController = navController, startDestination = startDestination!!) {
-
             composable("auth_screen") {
                 AuthScreen(
                     onAuthSuccess = {
@@ -200,8 +198,6 @@ fun VishnuCrockeryApp(
 
             composable("admin_dashboard") {
                 AdminDashboardScreen(
-                    onBack = { navController.popBackStack() },
-                    // This creates a NEW product, so we don't pass an ID
                     onAddProductClick = {
                         navController.navigate("add_edit_product")
                     },
