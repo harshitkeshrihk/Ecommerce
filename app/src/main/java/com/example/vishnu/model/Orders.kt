@@ -9,6 +9,7 @@ data class OrderRequest(
     @SerialName("payment_id") val paymentId: String,
     @SerialName("total_amount") val totalAmount: Double,
     @SerialName("shipping_address") val address: String,
+    @SerialName("store_id") val storeId: String,
     val status: String = "PAID"
 )
 
@@ -25,7 +26,8 @@ data class OrderItemRequest(
     @SerialName("product_id") val productId: String, // UUID
     @SerialName("product_name") val productName: String,
     val quantity: Int,
-    @SerialName("price_at_purchase") val price: Double
+    @SerialName("price_at_purchase") val price: Double,
+    @SerialName("store_id") val storeId: String,
 )
 
 @Serializable

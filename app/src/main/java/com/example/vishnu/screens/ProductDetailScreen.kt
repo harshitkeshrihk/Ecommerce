@@ -1,5 +1,6 @@
 package com.example.vishnu.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
@@ -46,9 +48,19 @@ fun ProductDetailScreen(
 
     val isAdmin by viewModel.isAdmin.collectAsState()
 
+    val showDialog = viewModel.showClearCartDialog
+
+    val context = LocalContext.current
+
     // 1. TRIGGER FETCH ON LAUNCH
     LaunchedEffect(productId) {
         viewModel.loadProduct(productId)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.toastEvent.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     var isPlayingVideo by remember { mutableStateOf(false) }
@@ -276,6 +288,25 @@ fun ProductDetailScreen(
                     color = Color.Gray
                 )
             }
+        }
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.cancelClearCart() },
+                title = { Text("Start new order?") },
+                text = { Text("Your cart contains items from a different store. Do you want to clear your cart and add this item instead?") },
+                confirmButton = {
+                    TextButton(
+                        onClick = { viewModel.confirmClearAndAdd() }
+                    ) {
+                        Text("Yes, Clear Cart", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.cancelClearCart() }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

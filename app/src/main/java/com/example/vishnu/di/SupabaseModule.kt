@@ -13,6 +13,8 @@ import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.serializer.KotlinXSerializer
+import io.github.jan.supabase.storage.Storage
+import io.github.jan.supabase.storage.storage
 import kotlinx.serialization.json.Json
 import javax.inject.Singleton
 
@@ -30,6 +32,7 @@ object SupabaseModule {
         ) {
             install(Postgrest) // This plugin handles the Database
             install(Auth) // <--- Add this line
+            install(Storage)
             defaultSerializer = KotlinXSerializer(
                 Json {
                     ignoreUnknownKeys = true // <--- THIS FIXES THE CRASH
@@ -57,5 +60,11 @@ object SupabaseModule {
     @Singleton
     fun providePostgrest(client: SupabaseClient): Postgrest {
         return client.postgrest
+    }
+
+    @Provides
+    @Singleton
+    fun provideStorage(client: SupabaseClient): Storage {
+        return client.storage // Extracts the Storage plugin from the client
     }
 }

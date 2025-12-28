@@ -105,4 +105,6 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.0")
 
     implementation("com.razorpay:checkout:1.6.33")
+
+    implementation("io.github.jan-tennert.supabase:storage-kt:3.0.0") // Check for latest version
 }

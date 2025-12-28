@@ -1,17 +1,28 @@
 package com.example.vishnu.screens
 
 import android.widget.Toast
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -22,7 +33,8 @@ import com.example.vishnu.viewModels.AddEditProductViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditProductScreen(
-    productId: String? = null, // Pass null to Add, ID to Edit
+    productId: String? = null,
+    storeId: String? = null, // Pass null to Add, ID to Edit
     onBack: () -> Unit,
     viewModel: AddEditProductViewModel = hiltViewModel()
 ) {
@@ -41,8 +53,20 @@ fun AddEditProductScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val saveStatus by viewModel.saveStatus.collectAsState()
 
-    // Initial Load
+    val selectedUri by viewModel.selectedImageUri.collectAsState()
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        viewModel.selectedImageUri.value = uri // Send to ViewModel
+    }
+
     LaunchedEffect(Unit) {
+        // 1. If we have a Store ID (Add Mode), tell the ViewModel
+        if (storeId != null) {
+            viewModel.setStoreId(storeId)
+        }
+        // 2. Load Product Data (Edit Mode)
         viewModel.loadProduct(productId)
     }
 
@@ -88,14 +112,44 @@ fun AddEditProductScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // --- Image Preview (Optional but helpful) ---
-                if (imageUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable {
+                            // Open Gallery
+                            imagePickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selectedUri != null) {
+                        // Priority 1: Show newly picked local image
+                        AsyncImage(
+                            model = selectedUri,
+                            contentDescription = "Selected Image",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else if (imageUrl.isNotEmpty()) {
+                        // Priority 2: Show existing remote image (Edit Mode)
+                        AsyncImage(
+                            model = imageUrl,
+                            contentDescription = "Current Image",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        // Priority 3: Show Placeholder
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.AddPhotoAlternate, null, tint = Color.Gray, modifier = Modifier.size(40.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Tap to add image", color = Color.Gray)
+                        }
+                    }
                 }
 
                 // --- Form Fields ---
@@ -122,14 +176,6 @@ fun AddEditProductScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
-
-                OutlinedTextField(
-                    value = imageUrl,
-                    onValueChange = { viewModel.imageUrl.value = it },
-                    label = { Text("Image URL") },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("https://...") }
-                )
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(

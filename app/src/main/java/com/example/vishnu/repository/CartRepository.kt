@@ -15,13 +15,18 @@ import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+
+sealed class AddToCartResult {
+    object Success : AddToCartResult()
+    object DifferentStoreConflict : AddToCartResult() // <--- The "Cart Conflict" Signal
+    data class Error(val message: String) : AddToCartResult()
+}
 
 @Singleton
 class CartRepository @Inject constructor(
@@ -54,10 +59,25 @@ class CartRepository @Inject constructor(
         }
     }
 
-    suspend fun addToCart(productId: String) = withContext(Dispatchers.IO) {
+    suspend fun addToCart(product: Product) : AddToCartResult = withContext(Dispatchers.IO) {
         try {
-            // 1. Check if item exists in local list (Optimistic check)
-            val existingItem = _cartItems.value.find { it.product.id == productId }
+            var currentCart = _cartItems.value
+
+            if (currentCart.isEmpty()) {
+                // This waits for the DB to return the actual list
+                currentCart = fetchCartItems()
+            }
+
+            // 1. CHECK FOR STORE CONFLICT
+            // If cart has items, ensure they are from the same store
+            if (currentCart.isNotEmpty()) {
+                val existingStoreId = currentCart.first().product.storeId
+                if (existingStoreId != product.storeId) {
+                    return@withContext AddToCartResult.DifferentStoreConflict
+                }
+            }
+
+            val existingItem = currentCart.find { it.product.id == product.id }
 
             if (existingItem != null) {
                 // UPDATE existing quantity
@@ -66,20 +86,26 @@ class CartRepository @Inject constructor(
                     { set("quantity", newQty) }
                 ) {
                     filter {
-                        eq("product_id", productId)
+                        eq("product_id", product.id)
                     }
                 }
             } else {
                 // INSERT new row
-                val request = CartRequest(productId = productId, quantity = 1)
+                val request = CartRequest(productId = product.id, quantity = 1)
                 postgrest["cart_items"].insert(request)
             }
 
             // 2. Refresh the UI
             fetchCartItems()
+            return@withContext AddToCartResult.Success
         } catch (e: Exception) {
             Log.e("CartRepo", "Error adding to cart", e)
+            return@withContext AddToCartResult.Error(e.message ?: "Unknown Error")
         }
+    }
+    suspend fun clearAndAdd(product: Product) {
+        clearCart()
+        addToCart(product)
     }
 
     suspend fun removeFromCart(productId: String) = withContext(Dispatchers.IO) {
@@ -160,12 +186,15 @@ class CartRepository @Inject constructor(
             val userId = auth.currentUserOrNull()?.id ?: return@withContext false
             Log.d("CartRepo", "Step 0: Starting Order for User: $userId")
 
+            val storeId = cartItems.firstOrNull()?.product?.storeId ?: return@withContext false
+
             // 1. Insert Parent Order
             val orderRequest = OrderRequest(
                 userId = userId,
                 paymentId = paymentId,
                 totalAmount = amount,
-                address = address
+                address = address,
+                storeId = storeId
             )
 
             // Get the new ID back
@@ -184,7 +213,8 @@ class CartRepository @Inject constructor(
                     productId = item.product.id,
                     productName = item.product.name,
                     quantity = item.quantity,
-                    price = item.product.priceRetail
+                    price = item.product.priceRetail,
+                    storeId = storeId
                 )
             }
 
@@ -223,3 +253,68 @@ class CartRepository @Inject constructor(
 
 
 }
+
+
+//// --- CRITICAL CHANGE: SPLIT ORDER LOGIC ---
+//suspend fun createOrderBySplitLogic(
+//    paymentId: String,
+//    address: String,
+//    cartItems: List<CartItem>
+//): Boolean = withContext(Dispatchers.IO) {
+//    val userId = auth.currentUserOrNull()?.id ?: return@withContext false
+//
+//    // 1. Group items by Store ID
+//    // (e.g. { "store_cafe_123": [Coffee, Cake], "store_med_456": [Pills] })
+//    val itemsByStore = cartItems.groupBy { it.product.storeId }
+//
+//    var allOrdersSuccess = true
+//
+//    try {
+//        // 2. Loop through each store and create a separate order
+//        itemsByStore.forEach { (storeId, items) ->
+//
+//            // Calculate total for THIS store only
+//            val storeTotalAmount = items.sumOf { it.product.priceRetail * it.quantity }
+//
+//            Log.d("CartRepo", "Creating Order for Store: $storeId | Amount: $storeTotalAmount")
+//
+//            // A. Insert Parent Order (Now includes storeId!)
+//            val orderRequest = OrderRequest(
+//                userId = userId,
+//                storeId = storeId, // <--- IMPORTANT: Link order to the store
+//                paymentId = paymentId,
+//                totalAmount = storeTotalAmount,
+//                address = address
+//            )
+//
+//            val orderResponse = postgrest["orders"]
+//                .insert(orderRequest) { select() }
+//                .decodeSingle<OrderResponse>()
+//
+//            val newOrderId = orderResponse.id
+//
+//            // B. Prepare Child Items
+//            val orderItemsList = items.map { item ->
+//                OrderItemRequest(
+//                    orderId = newOrderId,
+//                    productId = item.product.id,
+//                    productName = item.product.name,
+//                    quantity = item.quantity,
+//                    price = item.product.priceRetail,
+//                    storeId = storeId
+//                )
+//            }
+//
+//            // C. Insert Child Items
+//            postgrest["order_items"].insert(orderItemsList)
+//        }
+//
+//        // If loop finishes without crashing, we are good
+//        true
+//
+//    } catch (e: Exception) {
+//        Log.e("CartRepo", "Failed to create split orders", e)
+//        // Ideally, you'd implement a rollback here, but for now returning false lets UI show error
+//        false
+//    }
+//}

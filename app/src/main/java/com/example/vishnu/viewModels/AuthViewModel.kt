@@ -3,10 +3,13 @@ package com.example.vishnu.viewModels
 import androidx.datastore.dataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vishnu.repository.AdminRepository
 import com.example.vishnu.repository.AuthRepository
 import com.example.vishnu.utils.DataStoreManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -14,7 +17,8 @@ import javax.inject.Inject
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val repository: AuthRepository,
-    private val dataStoreManager: DataStoreManager
+    private val dataStoreManager: DataStoreManager,
+    private val adminRepository: AdminRepository
 ) : ViewModel() {
 
     // Inputs
@@ -25,6 +29,14 @@ class AuthViewModel @Inject constructor(
     // State
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState = _authState.asStateFlow()
+
+    sealed class AuthDestination {
+        object AdminDashboard : AuthDestination()
+        object Catalog : AuthDestination()
+    }
+
+    private val _navigationEvent = MutableSharedFlow<AuthDestination>()
+    val navigationEvent = _navigationEvent.asSharedFlow()
 
     // To decide navigation (App vs Login Screen)
     val sessionStatus = repository.sessionStatus
@@ -46,7 +58,18 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Loading
             try {
                 repository.signIn(email.value, password.value)
-                dataStoreManager.saveUserSession(true,isAdmin(email.value))
+
+                val myStore = adminRepository.getMyStore()
+                val isStoreOwner = myStore != null
+
+                dataStoreManager.saveUserSession(true,isStoreOwner)
+
+                if(isStoreOwner){
+                    _navigationEvent.emit(AuthDestination.AdminDashboard)
+                }else{
+                    _navigationEvent.emit(AuthDestination.Catalog)
+                }
+
                 _authState.value = AuthState.Success("Welcome back!")
             } catch (e: Exception) {
                 _authState.value = AuthState.Error(e.message ?: "Login failed")
@@ -61,16 +84,16 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun isAdmin(email: String?): Boolean {
-        return Constants.ADMIN_EMAILS.contains(email)
-    }
+//    fun isAdmin(email: String?): Boolean {
+//        return Constants.ADMIN_EMAILS.contains(email)
+//    }
 }
 
-object Constants {
-    val ADMIN_EMAILS = listOf(
-        "harshitkeshrihk@gmail.com",
-    )
-}
+//object Constants {
+//    val ADMIN_EMAILS = listOf(
+//        "harshitkeshrihk@gmail.com",
+//    )
+//}
 
 // Simple State Wrapper
 sealed class AuthState {

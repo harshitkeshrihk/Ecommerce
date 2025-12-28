@@ -34,11 +34,13 @@ import com.example.vishnu.viewModels.AdminViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminDashboardScreen(
-    onAddProductClick: () -> Unit,
+    onAddProductClick: (String) -> Unit,
     onGoToStoreClick: () -> Unit,
     viewModel: AdminViewModel = hiltViewModel()
 ) {
     val orders by viewModel.allOrders.collectAsState()
+    val storeName by viewModel.storeName.collectAsState() // <--- Observe Store Name
+    val isLoading by viewModel.isLoading.collectAsState()
     val context = LocalContext.current
 
     // Calculate Stats on the fly
@@ -57,11 +59,19 @@ fun AdminDashboardScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Text(
-                        "Admin Command Center",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Admin Dashboard",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.Gray
+                        )
+                        // Dynamic Store Name
+                        Text(
+                            text = storeName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.White
@@ -81,96 +91,114 @@ fun AdminDashboardScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAddProductClick,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Add Product") }
-            )
+            if (!isLoading && viewModel.currentStoreId != null) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        onAddProductClick(viewModel.currentStoreId!!)
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Add Product") }
+                )
+            }
         }
     ) { padding ->
-        LazyColumn(
-            contentPadding = padding,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // --- 1. STATS OVERVIEW SECTION ---
-            item {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Gray)
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Stats Grid
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatCard(
-                            title = "Total Revenue",
-                            value = "₹${totalRevenue.toInt()}",
-                            icon = Icons.Default.CurrencyRupee,
-                            color = Color(0xFF4CAF50), // Green
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "Pending",
-                            value = "$pendingCount",
-                            icon = Icons.Outlined.PendingActions,
-                            color = Color(0xFFFF9800), // Orange
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatCard(
-                            title = "Total Orders",
-                            value = "${orders.size}",
-                            icon = Icons.Outlined.Inventory2,
-                            color = Color(0xFF2196F3), // Blue
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "Shipped",
-                            value = "$shippedCount",
-                            icon = Icons.Outlined.LocalShipping,
-                            color = Color(0xFF9C27B0), // Purple
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+        if(isLoading){
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
             }
-
-            // --- 2. RECENT ORDERS HEADER ---
-            item {
-                PaddingValues(horizontal = 16.dp, vertical = 8.dp).let {
-                    Text(
-                        "Recent Orders",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
-                    )
-                }
-            }
-
-            // --- 3. ORDERS LIST ---
-            if (orders.isEmpty()) {
+        }else {
+            LazyColumn(
+                contentPadding = padding,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // --- 1. STATS OVERVIEW SECTION ---
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                        Text("No orders received yet.", color = Color.Gray)
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Overview",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Stats Grid
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            StatCard(
+                                title = "Total Revenue",
+                                value = "₹${totalRevenue.toInt()}",
+                                icon = Icons.Default.CurrencyRupee,
+                                color = Color(0xFF4CAF50), // Green
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatCard(
+                                title = "Pending",
+                                value = "$pendingCount",
+                                icon = Icons.Outlined.PendingActions,
+                                color = Color(0xFFFF9800), // Orange
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            StatCard(
+                                title = "Total Orders",
+                                value = "${orders.size}",
+                                icon = Icons.Outlined.Inventory2,
+                                color = Color(0xFF2196F3), // Blue
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatCard(
+                                title = "Shipped",
+                                value = "$shippedCount",
+                                icon = Icons.Outlined.LocalShipping,
+                                color = Color(0xFF9C27B0), // Purple
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
-            } else {
-                items(orders.reversed()) { order -> // Show newest first
-                    AdminOrderCardEnhanced(order = order, onStatusChange = { newStatus ->
-                        viewModel.changeStatus(order.id, newStatus)
-                    })
-                }
+
+                // --- 2. RECENT ORDERS HEADER ---
                 item {
-                    Spacer(modifier = Modifier.height(80.dp)) // Space for FAB
+                    PaddingValues(horizontal = 16.dp, vertical = 8.dp).let {
+                        Text(
+                            "Recent Orders",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+                        )
+                    }
+                }
+
+                // --- 3. ORDERS LIST ---
+                if (orders.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No orders received yet.", color = Color.Gray)
+                        }
+                    }
+                } else {
+                    items(orders.reversed()) { order -> // Show newest first
+                        AdminOrderCardEnhanced(order = order, onStatusChange = { newStatus ->
+                            viewModel.changeStatus(order.id, newStatus)
+                        })
+                    }
+                    item {
+                        Spacer(modifier = Modifier.height(80.dp)) // Space for FAB
+                    }
                 }
             }
         }

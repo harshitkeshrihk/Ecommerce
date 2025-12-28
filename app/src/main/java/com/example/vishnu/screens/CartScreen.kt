@@ -1,6 +1,9 @@
 package com.example.vishnu.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,6 +45,7 @@ val WhatsAppGreen = Color(0xFF25D366)
 fun CartScreen(
     onBackClick: () -> Unit,
     onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit,
+    onProductClick: (String) -> Unit,
     viewModel: CartViewModel = hiltViewModel()
 ) {
     val cartItems by viewModel.cartItems.collectAsState()
@@ -49,9 +54,25 @@ fun CartScreen(
     val phone by viewModel.userPhone.collectAsState()
     val context = LocalContext.current
 
+    val cartEvent = viewModel.cartEvent.collectAsState(initial = null)
+
 //    LaunchedEffect(Unit) {
 //        viewModel.fetchCartItems()
 //    }
+
+    LaunchedEffect(cartEvent.value) {
+        when(val event = cartEvent.value) {
+            is CartViewModel.CartEvent.OrderPlacedSuccess -> {
+//                navController.navigate("order_success_screen") {
+//                    popUpTo("cart") { inclusive = true }
+//                }
+            }
+            is CartViewModel.CartEvent.OrderFailed -> {
+                Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
+            }
+            null -> {} // Do nothing
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -101,7 +122,8 @@ fun CartScreen(
                         onRemove = { viewModel.removeFromCart(item.product.id) },
                         // Ideally, add onIncrease/onDecrease in your ViewModel later
                         onIncrease = { viewModel.increaseQty(item) },
-                        onDecrease = { viewModel.decreaseQty(item) }
+                        onDecrease = { viewModel.decreaseQty(item) },
+                        onItemClick = {onProductClick(item.product.id)}
                     )
                 }
             }
@@ -114,93 +136,99 @@ fun CartItemCard(
     item: CartItem,
     onRemove: () -> Unit,
     onIncrease: () -> Unit,
-    onDecrease: () -> Unit
+    onDecrease: () -> Unit,
+    onItemClick: () -> Unit, // <--- You have this, let's use it!
 ) {
     ElevatedCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.fillMaxWidth()
+        // OPTION A: Make the whole card clickable (simplest, but risky for buttons)
+        // .clickable { onItemClick() }
     ) {
         Row(
             modifier = Modifier
-                .padding(12.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Product Image
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(90.dp)
+            // --- CHANGE START: Wrapper for Clickable Area ---
+            // We wrap the Image and Text in a Row and make THAT clickable.
+            // This leaves the Delete button and Quantity controls OUTSIDE the click area.
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null // Removes ripple if you want clean look, or keep it
+                    ) { onItemClick() }, // <--- NAVIGATE HERE
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                AsyncImage(
-                    model = item.product.imageUrl,
-                    contentDescription = item.product.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // 2. Info Column
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
+                // 1. Product Image
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(90.dp)
                 ) {
+                    AsyncImage(
+                        model = item.product.imageUrl,
+                        contentDescription = item.product.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                // 2. Info Column
+                Column(modifier = Modifier.weight(1f)) {
+                    // Title
                     Text(
                         text = item.product.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                        overflow = TextOverflow.Ellipsis
                     )
 
-                    // Delete Button (Subtle)
-                    IconButton(
-                        onClick = onRemove,
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Remove",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
-                        )
-                    }
-                }
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "₹${item.product.priceRetail.toInt()}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 3. Bottom Row: Quantity & Total
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    QuantitySelector(
-                        quantity = item.quantity,
-                        onIncrease = onIncrease,
-                        onDecrease = onDecrease
-                    )
-
+                    // Price
                     Text(
-                        text = "₹${(item.product.priceRetail * item.quantity).toInt()}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        text = "₹${item.product.priceRetail.toInt()}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+            // --- CHANGE END ---
+
+            // 3. Right Side Actions (Delete & Quantity)
+            // These are OUTSIDE the clickable Row above, so they won't trigger navigation.
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.height(90.dp) // Match image height to space out nicely
+            ) {
+                // Delete Button
+                IconButton(
+                    onClick = onRemove,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Remove",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                    )
+                }
+
+                // Quantity Selector
+                QuantitySelector(
+                    quantity = item.quantity,
+                    onIncrease = onIncrease,
+                    onDecrease = onDecrease
+                )
             }
         }
     }

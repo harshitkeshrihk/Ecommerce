@@ -104,31 +104,31 @@ class ProfileRepository @Inject constructor(
         }
     }
 
-    suspend fun getAllOrdersForAdmin(): List<Order> = withContext(Dispatchers.IO) {
-        try {
-            postgrest["orders"]
-                .select {
-                    order("created_at", order = SupabaseOrder.DESCENDING)
-                }
-                .decodeList<Order>()
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    suspend fun updateOrderStatus(orderId: Long, newStatus: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            postgrest["orders"]
-                .update({
-                    set("status", newStatus)
-                }) {
-                    filter { eq("id", orderId) }
-                }
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
+//    suspend fun getAllOrdersForAdmin(): List<Order> = withContext(Dispatchers.IO) {
+//        try {
+//            postgrest["orders"]
+//                .select {
+//                    order("created_at", order = SupabaseOrder.DESCENDING)
+//                }
+//                .decodeList<Order>()
+//        } catch (e: Exception) {
+//            emptyList()
+//        }
+//    }
+//
+//    suspend fun updateOrderStatus(orderId: Long, newStatus: String): Boolean = withContext(Dispatchers.IO) {
+//        try {
+//            postgrest["orders"]
+//                .update({
+//                    set("status", newStatus)
+//                }) {
+//                    filter { eq("id", orderId) }
+//                }
+//            true
+//        } catch (e: Exception) {
+//            false
+//        }
+//    }
 
 
 }

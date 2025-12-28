@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
@@ -39,7 +40,6 @@ import com.example.vishnu.ui.theme.VishnuTheme
 import com.example.vishnu.utils.DataStoreManager
 import com.example.vishnu.viewModels.AuthViewModel
 import com.example.vishnu.viewModels.CartViewModel
-import com.example.vishnu.viewModels.Constants.ADMIN_EMAILS
 import com.example.vishnu.viewModels.MainViewModel
 import com.razorpay.Checkout
 import com.razorpay.PaymentData
@@ -57,13 +57,15 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
         Checkout.preload(applicationContext)
 
-        enableEdgeToEdge()
+//        enableEdgeToEdge()
         setContent {
-            VishnuCrockeryApp(
-                onInitiatePayment = { amount, email, phone ->
-                    startPayment(amount, email, phone)
-                }
-            )
+            VishnuTheme(dynamicColor=false) {
+                VishnuCrockeryApp(
+                    onInitiatePayment = { amount, email, phone ->
+                        startPayment(amount, email, phone)
+                    }
+                )
+            }
         }
     }
     private fun startPayment(amount: Double, email: String, phone: String) {
@@ -105,7 +107,7 @@ fun VishnuCrockeryApp(
 ) {
     val navController = rememberNavController()
     val startDestination by viewModel.startDestination.collectAsState()
-    val isAdmin by viewModel.isAdmin.collectAsState()
+//    val isAdmin by viewModel.isAdmin.collectAsState()
 
     if(startDestination == null){
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -114,17 +116,28 @@ fun VishnuCrockeryApp(
     }else {
         NavHost(navController = navController, startDestination = startDestination!!) {
             composable("auth_screen") {
-                AuthScreen(
-                    onAuthSuccess = {
-                       if(isAdmin){
-                            navController.navigate("admin_dashboard") {
-                                popUpTo("auth_screen") { inclusive = true }
+                LaunchedEffect(Unit) {
+                    authViewModel.navigationEvent.collect { destination ->
+                        when (destination) {
+                            is AuthViewModel.AuthDestination.AdminDashboard -> {
+                                navController.navigate("admin_dashboard") {
+                                    popUpTo("auth_screen") { inclusive = true }
+                                }
                             }
-                        } else {
-                            navController.navigate("catalog") {
-                                popUpTo("auth_screen") { inclusive = true }
+                            is AuthViewModel.AuthDestination.Catalog -> {
+                                navController.navigate("catalog") {
+                                    popUpTo("auth_screen") { inclusive = true }
+                                }
                             }
                         }
+                    }
+                }
+                AuthScreen(
+                    viewModel = authViewModel, // Pass the SAME instance
+                    onAuthSuccess = {
+                        // User is logged in, now trigger the Admin Check.
+                        // This will fire the navigationEvent above when done.
+                        authViewModel.onSignIn()
                     }
                 )
             }
@@ -174,7 +187,10 @@ fun VishnuCrockeryApp(
             composable("cart") {
                 CartScreen(
                     onBackClick = { navController.popBackStack() },
-                    onInitiatePayment = onInitiatePayment
+                    onInitiatePayment = onInitiatePayment,
+                    onProductClick = { productId ->
+                       navController.navigate("detail/{productId}")
+                    }
                 )
             }
 
@@ -198,8 +214,8 @@ fun VishnuCrockeryApp(
 
             composable("admin_dashboard") {
                 AdminDashboardScreen(
-                    onAddProductClick = {
-                        navController.navigate("add_edit_product")
+                    onAddProductClick = { storeId ->
+                        navController.navigate("add_edit_product?storeId=$storeId")
                     },
                     onGoToStoreClick = {
                         navController.navigate("catalog")
@@ -208,11 +224,15 @@ fun VishnuCrockeryApp(
             }
 
             composable(
-                route = "add_edit_product?productId={productId}",
-                arguments = listOf(navArgument("productId") { nullable = true })
-            ) {
+                route = "add_edit_product?productId={productId}&storeId={storeId}",
+                arguments = listOf(
+                    navArgument("productId") { nullable = true },
+                    navArgument("storeId") { nullable = true }
+                )
+            ) { backStackEntry ->
                 AddEditProductScreen(
-                    productId = it.arguments?.getString("productId"),
+                    productId = backStackEntry.arguments?.getString("productId"),
+                    storeId = backStackEntry.arguments?.getString("storeId"),
                     onBack = { navController.popBackStack() }
                 )
             }

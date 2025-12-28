@@ -42,6 +42,19 @@ class MainViewModel @Inject constructor(
                     _startDestination.value = "auth_screen" // Your Login route
                 }
             }
+
+//            combine(
+//                dataStoreManager.isLoggedIn,
+//                dataStoreManager.isAdmin
+//            ) { isLoggedIn, isAdmin ->
+//                when {
+//                    !isLoggedIn -> "auth_screen"       // Not logged in -> Login
+//                    isAdmin -> "admin_dashboard"       // Logged in & Admin -> Dashboard
+//                    else -> "catalog"                  // Logged in & Customer -> Catalog
+//                }
+//            }.collect { destination ->
+//                _startDestination.value = destination
+//            }  better approach
         }
     }
 }

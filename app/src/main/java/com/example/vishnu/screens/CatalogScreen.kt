@@ -1,5 +1,8 @@
 package com.example.vishnu.screens
 
+import StoreTabs
+import StoreUiModel
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -8,17 +11,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
@@ -36,6 +43,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -63,6 +72,13 @@ fun CatalogScreen(
 
     // UI Logic: We are in "Search Mode" if the query is not empty
     val isSearching = searchQuery.isNotEmpty()
+    val showDialog = viewModel.showClearCartDialog
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior() // <--- KEY: Collapsing behavior
+
+    val stores by viewModel.stores.collectAsState()
+    val selectedStoreId by viewModel.selectedStoreId.collectAsState()
+
+    val context = LocalContext.current
 
     // 1. Handle System Back Button
     // If searching, Back button clears search. If not, it does default action (exits app).
@@ -88,104 +104,155 @@ fun CatalogScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.toastEvent.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection), // <--- Connect scroll
         topBar = {
             Column(
                 modifier = Modifier
                     .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(bottom = 8.dp)
             ) {
-                // --- 1. Header (Location & Profile) ---
-                if (!isSearching) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = Color(0xFFE91E63) // Pinkish Red pin
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = location.split(",").firstOrNull()?.trim() ?: "Home",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                text = location,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                                maxLines = 1
-                            )
-                        }
-                        IconButton(onClick = onProfileClick) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Color(0xFFE91E63),
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text("V", color = Color.White, fontWeight = FontWeight.Bold)
+
+                TopAppBar(
+                    title = { /* Empty, we do custom layout below */ },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        scrolledContainerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    scrollBehavior = scrollBehavior,
+                    expandedHeight = 130.dp, // Give it enough height for Loc + Search
+                    windowInsets = WindowInsets(0.dp), // Fix top padding issues
+                    actions = {
+                        // --- 1. Header (Location & Profile) ---
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            if (!isSearching) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = Color(0xFFE91E63) // Pinkish Red pin
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = location.split(",").firstOrNull()?.trim()
+                                                ?: "Home",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        Text(
+                                            text = location,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                                alpha = 0.7f
+                                            ),
+                                            maxLines = 1
+                                        )
+                                    }
+                                    IconButton(onClick = onProfileClick) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Color(0xFFE91E63),
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    "V",
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
+                            }else{
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
+                            // --- 2. Search Bar Stub ---
+                            ActiveSearchBar(
+                                query = searchQuery,
+                                onQueryChange = { viewModel.onSearchQueryChange(it) },
+                                isSearching = isSearching,
+                                onBackClick = { viewModel.onSearchQueryChange("") } // Back arrow action
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
-                }else{
-                    // Spacer to give search bar some room at the top when header is gone
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
-                // --- 2. Search Bar Stub ---
-                ActiveSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { viewModel.onSearchQueryChange(it) },
-                    isSearching = isSearching,
-                    onBackClick = { viewModel.onSearchQueryChange("") } // Back arrow action
                 )
-
-                // --- 3. Dynamic Category Tabs ---
-                if (!isSearching && categories.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    ScrollableTabRow(
-                        selectedTabIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
-                        containerColor = Color.Transparent,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        edgePadding = 16.dp,
-                        indicator = { tabPositions ->
-                            if (categories.contains(selectedCategory)) {
-                                val index = categories.indexOf(selectedCategory)
-                                TabRowDefaults.Indicator(
-                                    Modifier.tabIndicatorOffset(tabPositions[index]),
-                                    color = Color(0xFFE91E63), // Pink indicator
-                                    height = 3.dp
-                                )
-                            }
-                        },
-                        divider = {} // No underline
+                if (!isSearching && stores.isNotEmpty()) {
+                    // Map your domain Store object to the UI model if needed,
+                    // or just change PremiumStoreTabs to accept your Store class directly.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.primaryContainer)
                     ) {
-                        categories.forEach { category ->
-                            Tab(
-                                selected = selectedCategory == category,
-                                onClick = { viewModel.onCategorySelected(category) },
-                                text = {
-                                    Text(
-                                        text = category,
-                                        style = if(selectedCategory == category)
-                                            MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
-                                        else
-                                            MaterialTheme.typography.bodyMedium
-                                    )
-                                },
-                                selectedContentColor = Color(0xFFE91E63),
-                                unselectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+
+                        if (stores.isNotEmpty()) {
+                            val uiStores = stores.map { StoreUiModel(it.id, it.name, it.type) }
+                            StoreTabs(
+                                stores = uiStores,
+                                selectedStoreId = selectedStoreId,
+                                onStoreSelected = { viewModel.selectStore(it) }
                             )
+                        }
+
+                        // --- 4. Dynamic Category Tabs ---
+                        if (categories.isNotEmpty()) {
+                            ScrollableTabRow(
+                                selectedTabIndex = categories.indexOf(selectedCategory)
+                                    .coerceAtLeast(0),
+                                containerColor = Color.Transparent,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                edgePadding = 16.dp,
+                                indicator = { tabPositions ->
+                                    if (categories.contains(selectedCategory)) {
+                                        val index = categories.indexOf(selectedCategory)
+                                        TabRowDefaults.Indicator(
+                                            Modifier.tabIndicatorOffset(tabPositions[index]),
+                                            color = Color(0xFFE91E63), // Pink indicator
+                                            height = 3.dp
+                                        )
+                                    }
+                                },
+                                divider = {} // No underline
+                            ) {
+                                categories.forEach { category ->
+                                    Tab(
+                                        selected = selectedCategory == category,
+                                        onClick = { viewModel.onCategorySelected(category) },
+                                        text = {
+                                            Text(
+                                                text = category,
+                                                style = if (selectedCategory == category)
+                                                    MaterialTheme.typography.bodyLarge.copy(
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                else
+                                                    MaterialTheme.typography.bodyMedium
+                                            )
+                                        },
+                                        selectedContentColor = Color(0xFFE91E63),
+                                        unselectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                            alpha = 0.6f
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -241,6 +308,28 @@ fun CatalogScreen(
                     )
                 }
             }
+        }
+
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.cancelClearCart() },
+                title = { Text("Start new order?") },
+                text = {
+                    Text("Your cart contains items from a different store. Do you want to clear your cart and add this item instead?")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { viewModel.confirmClearAndAdd() } // <--- CALLS THE FUNCTION
+                    ) {
+                        Text("Yes, Clear Cart", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.cancelClearCart() }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

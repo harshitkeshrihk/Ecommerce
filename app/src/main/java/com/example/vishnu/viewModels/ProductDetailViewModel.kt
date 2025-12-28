@@ -1,10 +1,12 @@
 package com.example.vishnu.viewModels
 
+import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.vishnu.model.Product
+import com.example.vishnu.repository.AddToCartResult
 import com.example.vishnu.repository.CartRepository
 import com.example.vishnu.repository.ProductRepository
 import com.example.vishnu.utils.DataStoreManager
@@ -16,6 +18,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 
 @HiltViewModel
 class ProductDetailViewModel @Inject constructor(
@@ -33,6 +37,14 @@ class ProductDetailViewModel @Inject constructor(
 
     val isAdmin = dataStoreManager.isAdmin
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    var showClearCartDialog by mutableStateOf(false)
+        private set
+
+    private var pendingProductToAdd: Product? = null
+
+    private val _toastEvent = Channel<String>()
+    val toastEvent = _toastEvent.receiveAsFlow()
 
     // Prepare the video (Safe to call multiple times)
     fun initializePlayer(videoUrl: String) {
@@ -56,12 +68,44 @@ class ProductDetailViewModel @Inject constructor(
     fun addToCart(product: Product?) {
         if (product!=null){
             viewModelScope.launch {
-                cartRepository.addToCart(product.id)
+                val result = cartRepository.addToCart(product)
+                when (result) {
+                    is AddToCartResult.Success -> {
+                        // Optional: Show Success Toast
+                        _toastEvent.send("${product.name} added to cart")
+                    }
+                    is AddToCartResult.DifferentStoreConflict -> {
+                        // Trigger Dialog
+                        pendingProductToAdd = product
+                        showClearCartDialog = true
+                    }
+                    is AddToCartResult.Error -> {
+                        // Handle error (log it)
+                        _toastEvent.send("Failed to add: ${result.message}")
+                    }
+                }
             }
         }else {
 
         }
     }
+
+    fun confirmClearAndAdd() {
+        viewModelScope.launch {
+            pendingProductToAdd?.let {
+                cartRepository.clearAndAdd(it)
+                _toastEvent.send("Cart cleared. ${pendingProductToAdd!!.name} added!")
+            }
+            showClearCartDialog = false
+            pendingProductToAdd = null
+        }
+    }
+
+    fun cancelClearCart() {
+        showClearCartDialog = false
+        pendingProductToAdd = null
+    }
+
 
     fun loadProduct(productId: String) {
         viewModelScope.launch {

@@ -2,20 +2,25 @@ package com.example.vishnu.viewModels
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vishnu.model.Product
+import com.example.vishnu.model.Store
+import com.example.vishnu.repository.AddToCartResult
 import com.example.vishnu.repository.CartRepository
 import com.example.vishnu.repository.ProductRepository
 import com.example.vishnu.utils.LocationManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -44,6 +49,20 @@ class CatalogViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
+    private val _stores = MutableStateFlow<List<Store>>(emptyList())
+    val stores = _stores.asStateFlow()
+
+    private val _selectedStoreId = MutableStateFlow<String?>(null)
+    val selectedStoreId = _selectedStoreId.asStateFlow()
+
+    var showClearCartDialog by mutableStateOf(false)
+        private set
+
+    private var pendingProductToAdd: Product? = null
+
+    private val _toastEvent = Channel<String>()
+    val toastEvent = _toastEvent.receiveAsFlow()
+
     val categories: StateFlow<List<String>> = _products.map { productList ->
         listOf("All") + productList.map { it.category }.distinct().sorted()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("All"))
@@ -65,39 +84,109 @@ class CatalogViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
-        fetchProducts()
+//        fetchProducts()
+        initializeCatalog()
         fetchLocation()
     }
 
-    private fun fetchProducts() {
+    private fun initializeCatalog() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // The Network Call 🌍
-                val list = repository.getProducts()
-                android.util.Log.d("DEBUG_APP", "Fetched size: ${list.size}")
-                if (list.isNotEmpty()) {
-                    android.util.Log.d("DEBUG_APP", "First Item: ${list[0].name}")
+                // 1. Fetch Stores
+                val storeList = repository.getStores()
+                _stores.value = storeList
+
+                // 2. Select default store (First one)
+                if (storeList.isNotEmpty()) {
+                    selectStore(storeList[0].id)
                 } else {
-                    android.util.Log.e("DEBUG_APP", "List is EMPTY! Check Supabase RLS or Keys.")
+                    _isLoading.value = false // No stores found
                 }
-                _products.value = list
             } catch (e: Exception) {
-                e.printStackTrace() // Log errors if any
-            } finally {
+                Log.e("ViewModel", "Error init catalog", e)
                 _isLoading.value = false
             }
         }
     }
 
+    fun selectStore(storeId: String) {
+        _selectedStoreId.value = storeId
+        _selectedCategory.value = "All" // Reset category when switching stores
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            // 3. Fetch products for THIS store only
+            val list = repository.getProductsByStore(storeId)
+            _products.value = list
+            _isLoading.value = false
+        }
+    }
+
+//    private fun fetchProducts() {
+//        viewModelScope.launch {
+//            _isLoading.value = true
+//            try {
+//                // The Network Call 🌍
+//                val list = repository.getProducts()
+//                android.util.Log.d("DEBUG_APP", "Fetched size: ${list.size}")
+//                if (list.isNotEmpty()) {
+//                    android.util.Log.d("DEBUG_APP", "First Item: ${list[0].name}")
+//                } else {
+//                    android.util.Log.e("DEBUG_APP", "List is EMPTY! Check Supabase RLS or Keys.")
+//                }
+//                _products.value = list
+//            } catch (e: Exception) {
+//                e.printStackTrace() // Log errors if any
+//            } finally {
+//                _isLoading.value = false
+//            }
+//        }
+//    }
+
     fun addToCart(product: Product?) {
         if (product!=null){
             viewModelScope.launch {
-                cartRepository.addToCart(product.id)
+                val result = cartRepository.addToCart(product)
+
+                when(result){
+                    is AddToCartResult.Success -> {
+                        Log.d("Cart", "Item added")
+                        _toastEvent.send("${product.name} added to cart")
+                    }
+                    is AddToCartResult.DifferentStoreConflict -> {
+                        // 2. CONFLICT FOUND! Save product & Show Dialog
+                        pendingProductToAdd = product
+                        showClearCartDialog = true
+                    }
+                    is AddToCartResult.Error -> {
+                        Log.e("Cart", "Error: ${result.message}")
+                        _toastEvent.send("Failed to add: ${result.message}")
+                    }
+                }
             }
         }else {
            Log.d("DEBUG_APP", "Product is null!")
         }
+    }
+
+    fun confirmClearAndAdd() {
+        viewModelScope.launch {
+            val product = pendingProductToAdd
+            if (product != null) {
+                // 3. The Actual Call
+                cartRepository.clearAndAdd(product)
+                _toastEvent.send("Cart cleared. ${product.name} added!")
+            }
+            // Reset State
+            showClearCartDialog = false
+            pendingProductToAdd = null
+        }
+    }
+
+    fun cancelClearCart() {
+        showClearCartDialog = false
+        pendingProductToAdd = null
     }
 
     fun fetchLocation() {

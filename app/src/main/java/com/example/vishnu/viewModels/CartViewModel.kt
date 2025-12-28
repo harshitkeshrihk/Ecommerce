@@ -13,9 +13,11 @@ import com.example.vishnu.utils.LocationManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.auth.Auth
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -45,6 +47,14 @@ class CartViewModel @Inject constructor(
 
     private val _userPhone = MutableStateFlow("")
     val userPhone = _userPhone.asStateFlow()
+
+    sealed class CartEvent {
+        object OrderPlacedSuccess : CartEvent()
+        data class OrderFailed(val message: String) : CartEvent()
+    }
+
+    private val _cartEvent = MutableSharedFlow<CartEvent>()
+    val cartEvent = _cartEvent.asSharedFlow()
 
     init {
         viewModelScope.launch {
@@ -106,6 +116,13 @@ class CartViewModel @Inject constructor(
             _isLoading.value = true
 
             val freshItems: List<CartItem> =  cartRepository.fetchCartItems()
+
+            if (freshItems.isEmpty()) {
+                _cartEvent.emit(CartEvent.OrderFailed("Cart is empty"))
+                _isLoading.value = false
+                return@launch
+            }
+
             var freshCartPrice: Double = 0.0
             freshItems.forEach { items ->
                 freshCartPrice += items.product.priceRetail * items.quantity
@@ -124,6 +141,9 @@ class CartViewModel @Inject constructor(
             if (success) {
                 cartRepository.clearCart()
                 // You can expose a state here to Navigate to "Order Success Screen"
+                _cartEvent.emit(CartEvent.OrderPlacedSuccess)
+            }else{
+                _cartEvent.emit(CartEvent.OrderFailed("Failed to create order on server"))
             }
             _isLoading.value = false
         }

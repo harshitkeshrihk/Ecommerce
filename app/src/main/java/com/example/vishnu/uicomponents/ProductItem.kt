@@ -112,22 +112,26 @@ fun ProductItem(
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(4.dp)
                     ) {
-                        Text(
-                            text = product.gauge,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
+                        product?.gauge?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(6.dp))
 
                     // Badge 2: Weight (Important!)
-                    Text(
-                        text = product.weight,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
+                    product.weight?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
