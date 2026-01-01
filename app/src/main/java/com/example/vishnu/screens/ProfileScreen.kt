@@ -35,7 +35,7 @@ import com.example.vishnu.viewModels.ProfileViewModel
 
 // Enum to manage internal navigation
 enum class ProfileSubScreen {
-    MENU, EDIT_PROFILE, ORDERS, WISHLIST
+    MENU, EDIT_PROFILE, ORDERS, WISHLIST , ORDER_DETAILS , ADDRESSES
 }
 
 @OptIn(ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
@@ -47,6 +47,8 @@ fun ProfileScreen(
 ) {
     var currentScreen by remember { mutableStateOf(ProfileSubScreen.MENU) }
     val context = LocalContext.current
+
+    var selectedOrder by remember { mutableStateOf<Order?>(null) }
 
     // Handle System Back Button
     BackHandler(enabled = currentScreen != ProfileSubScreen.MENU) {
@@ -94,7 +96,11 @@ fun ProfileScreen(
                     ProfileSubScreen.ORDERS -> {
                         OrdersView(
                             viewModel = viewModel,
-                            onBack = { currentScreen = ProfileSubScreen.MENU }
+                            onBack = { currentScreen = ProfileSubScreen.MENU },
+                            onOrderClick = {order->
+                                selectedOrder = order
+                                currentScreen = ProfileSubScreen.ORDER_DETAILS
+                            }
                         )
                     }
                     ProfileSubScreen.WISHLIST -> {
@@ -103,6 +109,20 @@ fun ProfileScreen(
                             title = "Your Wishlist",
                             icon = Icons.Outlined.FavoriteBorder,
                             message = "You haven't saved any items yet.",
+                            onBack = { currentScreen = ProfileSubScreen.MENU }
+                        )
+                    }
+                    ProfileSubScreen.ORDER_DETAILS -> {
+                        if (selectedOrder != null) {
+                            OrderDetailScreen(
+                                order = selectedOrder!!,
+                                onBack = { currentScreen = ProfileSubScreen.ORDERS }
+                            )
+                        }
+                    }
+                    ProfileSubScreen.ADDRESSES -> {
+                        SavedAddressesScreen(
+                            viewModel = viewModel,
                             onBack = { currentScreen = ProfileSubScreen.MENU }
                         )
                     }
@@ -194,6 +214,13 @@ fun DashboardView(
                 title = "Help & Support",
                 subtitle = "Contact customer care",
                 onClick = onSupportClick
+            )
+
+            MenuOptionCard(
+                icon = Icons.Outlined.LocationOn,
+                title = "Add Address",
+                subtitle = "Manage Your Addresses",
+                onClick = {onNavigate(ProfileSubScreen.ADDRESSES)}
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -306,7 +333,8 @@ fun EditProfileView(
 @Composable
 fun OrdersView(
     viewModel: ProfileViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOrderClick: (Order) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Active", "History")
@@ -350,7 +378,10 @@ fun OrdersView(
                 ) {
                     items(ordersToShow) { order ->
                         // Using the Card we created in previous steps
-                        OrderItemCard(order = order, viewModel = viewModel)
+                        OrderItemCard(
+                            order = order,
+                            onOrderClick = { onOrderClick(order) }
+                        )
                     }
                 }
             }

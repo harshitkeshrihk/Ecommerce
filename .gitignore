@@ -14,3 +14,6 @@
 .cxx
 local.properties
 .idea/
+# Ignore Kotlin error logs
+.kotlin/
+*.log

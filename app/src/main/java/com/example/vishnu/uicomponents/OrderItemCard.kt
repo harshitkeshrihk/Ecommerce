@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
@@ -35,32 +36,14 @@ import kotlinx.coroutines.launch
 @Composable
 fun OrderItemCard(
     order: Order,
-    viewModel: ProfileViewModel = hiltViewModel()
+    onOrderClick: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    // State to hold the detailed items once fetched
-    var orderDetails by remember { mutableStateOf<List<OrderItemDetail>>(emptyList()) }
-    var isLoadingDetails by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    // Effect to fetch data ONLY when expanded for the first time
-    LaunchedEffect(expanded) {
-        if (expanded && orderDetails.isEmpty()) {
-            isLoadingDetails = true
-            // Fetch in background scope
-            scope.launch {
-                orderDetails = viewModel.getOrderItems(order.id)
-                isLoadingDetails = false
-            }
-        }
-    }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp, horizontal = 16.dp)
             .clip(RoundedCornerShape(12.dp))
-            .clickable { expanded = !expanded }, // Toggle expand on click
+            .clickable { onOrderClick() }, // Toggle expand on click
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
@@ -115,70 +98,13 @@ fun OrderItemCard(
 
             // Expand/Collapse Indicator + Divider
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Divider(modifier = Modifier.weight(1f), color = Color.LightGray.copy(alpha = 0.3f))
-                Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Toggle Details",
-                    tint = Color.Gray,
-                    modifier = Modifier.padding(start = 8.dp)
+                Text(
+                    "Tap to view details & track",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                 )
-            }
-
-
-            // --- EXPANDABLE DETAILS SECTION ---
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
-                exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
-            ) {
-                Column(modifier = Modifier.padding(top = 12.dp)) {
-                    if (isLoadingDetails) {
-                        // Loading State
-                        Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        }
-                    } else if (orderDetails.isEmpty()) {
-                        // Error/Empty State
-                        Text("No items found for this order.", style = MaterialTheme.typography.bodySmall, color = Color.Red)
-                    } else {
-                        // List of Items
-                        Text("Items", style = MaterialTheme.typography.labelMedium, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
-                        orderDetails.forEach { item ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Quantity x Name
-                                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Top) {
-                                    Text(
-                                        text = "${item.quantity}x",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(end = 8.dp)
-                                    )
-                                    Text(
-                                        text = item.productName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                // Price
-                                Text(
-                                    text = "₹${(item.price * item.quantity).toInt()}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                            if (item != orderDetails.last()) {
-                                Divider(color = Color.LightGray.copy(alpha = 0.1f), thickness = 1.dp)
-                            }
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(Icons.Default.ChevronRight, null, tint = Color.LightGray)
             }
         }
     }

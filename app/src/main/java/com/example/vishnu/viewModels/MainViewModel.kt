@@ -1,5 +1,6 @@
 package com.example.vishnu.viewModels
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vishnu.repository.AuthRepository
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -29,32 +31,17 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             // Optional: Add a small delay if you want to show a Splash Screen logo
             // delay(1000)
-            dataStoreManager.isLoggedIn.collect { isLoggedIn ->
+            val isLoggedIn = dataStoreManager.isLoggedIn.first()
                 if (isLoggedIn) {
-                    dataStoreManager.isAdmin.collect { isAdmin ->
+                    val isAdmin  = dataStoreManager.isAdmin.first()
                         if(isAdmin) {
                             _startDestination.value = "admin_dashboard"
                         }else {
                             _startDestination.value = "catalog"
                         }
-                    }
                 } else {
                     _startDestination.value = "auth_screen" // Your Login route
                 }
-            }
-
-//            combine(
-//                dataStoreManager.isLoggedIn,
-//                dataStoreManager.isAdmin
-//            ) { isLoggedIn, isAdmin ->
-//                when {
-//                    !isLoggedIn -> "auth_screen"       // Not logged in -> Login
-//                    isAdmin -> "admin_dashboard"       // Logged in & Admin -> Dashboard
-//                    else -> "catalog"                  // Logged in & Customer -> Catalog
-//                }
-//            }.collect { destination ->
-//                _startDestination.value = destination
-//            }  better approach
         }
     }
 }

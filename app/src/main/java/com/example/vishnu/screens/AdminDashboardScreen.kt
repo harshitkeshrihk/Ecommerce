@@ -191,7 +191,7 @@ fun AdminDashboardScreen(
                         }
                     }
                 } else {
-                    items(orders.reversed()) { order -> // Show newest first
+                    items(orders) { order -> // Show newest first
                         AdminOrderCardEnhanced(order = order, onStatusChange = { newStatus ->
                             viewModel.changeStatus(order.id, newStatus)
                         })

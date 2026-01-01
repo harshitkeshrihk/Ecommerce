@@ -7,6 +7,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vishnu.model.CartItem
+import com.example.vishnu.model.UserAddress
+import com.example.vishnu.repository.AddressRepository
 import com.example.vishnu.repository.CartRepository
 import com.example.vishnu.repository.ProfileRepository
 import com.example.vishnu.utils.LocationManager
@@ -28,6 +30,7 @@ import javax.inject.Inject
 class CartViewModel @Inject constructor(
     private val cartRepository: CartRepository,
     private val profileRepository: ProfileRepository, // Inject Profile Repo
+    private val addressRepository: AddressRepository,
     private val auth: Auth,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -39,14 +42,20 @@ class CartViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
-    private val _userLocation = MutableStateFlow("Fetching location...")
-    val userLocation = _userLocation.asStateFlow()
+//    private val _userLocation = MutableStateFlow("Fetching location...")
+//    val userLocation = _userLocation.asStateFlow()
 
     private val _userEmail = MutableStateFlow("")
     val userEmail = _userEmail.asStateFlow()
 
     private val _userPhone = MutableStateFlow("")
     val userPhone = _userPhone.asStateFlow()
+
+    private val _savedAddresses = MutableStateFlow<List<UserAddress>>(emptyList())
+    val savedAddresses = _savedAddresses.asStateFlow()
+
+    private val _selectedAddress = MutableStateFlow<UserAddress?>(null)
+    val selectedAddress = _selectedAddress.asStateFlow()
 
     sealed class CartEvent {
         object OrderPlacedSuccess : CartEvent()
@@ -59,8 +68,9 @@ class CartViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             cartRepository.fetchCartItems()
-            fetchLocation()
+//            fetchLocation()
             fetchUserDetails()
+            fetchAddresses()
         }
     }
 
@@ -128,13 +138,16 @@ class CartViewModel @Inject constructor(
                 freshCartPrice += items.product.priceRetail * items.quantity
             }
 
-            val profile = profileRepository.getUserProfile()
-            val address = profile?.address ?: "AddressNotProvided"
+            val addressToUse =
+                _selectedAddress.value?.addressText
+                    ?: savedAddresses.value.find { it.isDefault }?.addressText
+                    ?: profileRepository.getUserProfile()?.address
+                    ?: "Address Not Provided"
 
             val success = cartRepository.createOrder(
                 paymentId = paymentId,
                 amount = freshCartPrice,
-                address = address,
+                address = addressToUse,
                 cartItems = freshItems
             )
 
@@ -149,12 +162,26 @@ class CartViewModel @Inject constructor(
         }
     }
 
-    fun fetchLocation() {
+//    fun fetchLocation() {
+//        viewModelScope.launch {
+//            val locationManager = LocationManager(context)
+//            val address = locationManager.getCurrentAddress()
+//            _userLocation.value = address ?: "Location Unavailable"
+//        }
+//    }
+
+    fun fetchAddresses(){
         viewModelScope.launch {
-            val locationManager = LocationManager(context)
-            val address = locationManager.getCurrentAddress()
-            _userLocation.value = address ?: "Location Unavailable"
+            val list = addressRepository.getUserAddresses()
+            _savedAddresses.value = list
+            if(_selectedAddress.value == null){
+                _selectedAddress.value = list.find{it.isDefault} ?: list.firstOrNull()
+            }
         }
+    }
+
+    fun selectAddress(address: UserAddress){
+        _selectedAddress.value = address
     }
 
     // 4. The WhatsApp Checkout Logic

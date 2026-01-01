@@ -13,14 +13,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.vishnu.model.CartItem
+import com.example.vishnu.model.UserAddress
 import com.example.vishnu.viewModels.CartViewModel
 
 // Define WhatsApp Green Color
@@ -46,7 +53,7 @@ fun CartScreen(
     onBackClick: () -> Unit,
     onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit,
     onProductClick: (String) -> Unit,
-    viewModel: CartViewModel = hiltViewModel()
+    viewModel: CartViewModel
 ) {
     val cartItems by viewModel.cartItems.collectAsState()
     val totalPrice by viewModel.totalPrice.collectAsState()
@@ -56,6 +63,10 @@ fun CartScreen(
 
     val cartEvent = viewModel.cartEvent.collectAsState(initial = null)
 
+    val selectedAddress by viewModel.selectedAddress.collectAsState()
+    val savedAddresses by viewModel.savedAddresses.collectAsState()
+    var showAddressSheet by remember { mutableStateOf(false) }
+
 //    LaunchedEffect(Unit) {
 //        viewModel.fetchCartItems()
 //    }
@@ -63,9 +74,7 @@ fun CartScreen(
     LaunchedEffect(cartEvent.value) {
         when(val event = cartEvent.value) {
             is CartViewModel.CartEvent.OrderPlacedSuccess -> {
-//                navController.navigate("order_success_screen") {
-//                    popUpTo("cart") { inclusive = true }
-//                }
+                Toast.makeText(context, "Order Placed Successfully!", Toast.LENGTH_LONG).show()
             }
             is CartViewModel.CartEvent.OrderFailed -> {
                 Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
@@ -97,7 +106,17 @@ fun CartScreen(
             if (cartItems.isNotEmpty()) {
                 CartSummaryBottomBar(
                     totalPrice = totalPrice,
-                    onCheckout = { onInitiatePayment(totalPrice,email,phone) }
+                    onCheckout = {
+                        if(selectedAddress == null) {
+                            Toast.makeText(context, "Please select a delivery address", Toast.LENGTH_SHORT).show()
+                            showAddressSheet = true
+                        } else {
+                            val phoneToUse = selectedAddress!!.phoneNumber.ifBlank {
+                                phone
+                            }
+                            onInitiatePayment(totalPrice, email, phoneToUse)
+                        }
+                    }
                 )
             }
         },
@@ -116,6 +135,13 @@ fun CartScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                item {
+                    AddressSelectionHeader(
+                        selectedAddress = selectedAddress,
+                        onChangeClick = { showAddressSheet = true }
+                    )
+                }
+
                 items(cartItems) { item ->
                     CartItemCard(
                         item = item,
@@ -129,6 +155,21 @@ fun CartScreen(
             }
         }
     }
+    if (showAddressSheet) {
+        AddressSelectionSheet(
+            addresses = savedAddresses,
+            currentSelectedId = selectedAddress?.id,
+            onAddressSelected = {
+                viewModel.selectAddress(it)
+                showAddressSheet = false
+            },
+            onDismiss = { showAddressSheet = false },
+            onAddNew = {
+                Toast.makeText(context, "Go to Profile to add new addresses", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
 }
 
 @Composable
@@ -389,6 +430,148 @@ fun EmptyCartState(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("Start Shopping")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddressSelectionSheet(
+    addresses: List<UserAddress>,
+    currentSelectedId: String?,
+    onAddressSelected: (UserAddress) -> Unit,
+    onDismiss: () -> Unit,
+    onAddNew: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color.White
+    ) {
+        Column(modifier = Modifier.padding(bottom = 32.dp)) {
+            Text(
+                "Choose Delivery Address",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+            )
+
+            if (addresses.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No saved addresses found.", color = Color.Gray)
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    items(addresses) { address ->
+                        val isSelected = address.id == currentSelectedId
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onAddressSelected(address) }
+                                .background(if (isSelected) Color(0xFFE3F2FD) else Color.White)
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                                contentDescription = null,
+                                tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(address.label, fontWeight = FontWeight.Bold)
+                                Text(
+                                    address.addressText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.DarkGray
+                                )
+                            }
+                        }
+                        Divider(color = Color.LightGray.copy(alpha = 0.2f))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Add New Button
+            Button(
+                onClick = onAddNew,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Manage Addresses")
+            }
+        }
+    }
+}
+
+@Composable
+fun AddressSelectionHeader(
+    selectedAddress: UserAddress?,
+    onChangeClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(1.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFE3F2FD)), // Light Blue
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.LocationOn, null, tint = MaterialTheme.colorScheme.primary)
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Text
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Deliver to: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = selectedAddress?.label ?: "Select Address",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = selectedAddress?.addressText ?: "No address selected",
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // Change Button
+            TextButton(onClick = onChangeClick) {
+                Text("CHANGE", fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -7,12 +7,13 @@ import com.example.vishnu.repository.AdminRepository
 import com.example.vishnu.repository.AuthRepository
 import com.example.vishnu.utils.DataStoreManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.flow.receiveAsFlow
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -35,8 +36,8 @@ class AuthViewModel @Inject constructor(
         object Catalog : AuthDestination()
     }
 
-    private val _navigationEvent = MutableSharedFlow<AuthDestination>()
-    val navigationEvent = _navigationEvent.asSharedFlow()
+    private val _navigationEvent = Channel<AuthDestination>()
+    val navigationEvent = _navigationEvent.receiveAsFlow()
 
     // To decide navigation (App vs Login Screen)
     val sessionStatus = repository.sessionStatus
@@ -65,9 +66,9 @@ class AuthViewModel @Inject constructor(
                 dataStoreManager.saveUserSession(true,isStoreOwner)
 
                 if(isStoreOwner){
-                    _navigationEvent.emit(AuthDestination.AdminDashboard)
+                    _navigationEvent.send(AuthDestination.AdminDashboard)
                 }else{
-                    _navigationEvent.emit(AuthDestination.Catalog)
+                    _navigationEvent.send(AuthDestination.Catalog)
                 }
 
                 _authState.value = AuthState.Success("Welcome back!")
@@ -79,10 +80,15 @@ class AuthViewModel @Inject constructor(
 
     fun onSignOut() {
         viewModelScope.launch {
-            repository.signOut()
+            _authState.value = AuthState.Idle
+            email.value = ""
+            password.value = ""
+            fullName.value = ""
             dataStoreManager.clearSession() // Clear local flag
+            repository.signOut()
         }
     }
+
 
 //    fun isAdmin(email: String?): Boolean {
 //        return Constants.ADMIN_EMAILS.contains(email)

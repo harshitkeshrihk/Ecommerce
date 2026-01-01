@@ -1,6 +1,7 @@
 package com.example.vishnu
 
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -61,6 +63,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         setContent {
             VishnuTheme(dynamicColor=false) {
                 VishnuCrockeryApp(
+                    cartViewModel=cartViewModel,
                     onInitiatePayment = { amount, email, phone ->
                         startPayment(amount, email, phone)
                     }
@@ -101,6 +104,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
 @Composable
 fun VishnuCrockeryApp(
+    cartViewModel: CartViewModel,
     viewModel: MainViewModel = hiltViewModel(),
     authViewModel: AuthViewModel = hiltViewModel(),
     onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit
@@ -116,8 +120,7 @@ fun VishnuCrockeryApp(
     }else {
         NavHost(navController = navController, startDestination = startDestination!!) {
             composable("auth_screen") {
-                LaunchedEffect(Unit) {
-                    authViewModel.navigationEvent.collect { destination ->
+                ObserveAsEvents(authViewModel.navigationEvent) { destination ->
                         when (destination) {
                             is AuthViewModel.AuthDestination.AdminDashboard -> {
                                 navController.navigate("admin_dashboard") {
@@ -131,14 +134,8 @@ fun VishnuCrockeryApp(
                             }
                         }
                     }
-                }
                 AuthScreen(
                     viewModel = authViewModel, // Pass the SAME instance
-                    onAuthSuccess = {
-                        // User is logged in, now trigger the Admin Check.
-                        // This will fire the navigationEvent above when done.
-                        authViewModel.onSignIn()
-                    }
                 )
             }
             // Screen 1: Catalog
@@ -188,6 +185,7 @@ fun VishnuCrockeryApp(
                 CartScreen(
                     onBackClick = { navController.popBackStack() },
                     onInitiatePayment = onInitiatePayment,
+                    viewModel = cartViewModel,
                     onProductClick = { productId ->
                        navController.navigate("detail/{productId}")
                     }
@@ -245,5 +243,15 @@ fun VishnuCrockeryApp(
 fun GreetingPreview() {
     VishnuTheme {
 
+    }
+}
+
+@Composable
+fun <T> ObserveAsEvents(flow: kotlinx.coroutines.flow.Flow<T>, onEvent: (T) -> Unit) {
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(flow, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            flow.collect(onEvent)
+        }
     }
 }
