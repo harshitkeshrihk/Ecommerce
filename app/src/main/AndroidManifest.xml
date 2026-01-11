@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:name=".CrockeryApp"
@@ -31,6 +32,11 @@
         <meta-data
             android:name="com.razorpay.ApiKey"
             android:value="rzp_test_RvAYVqnRum5bKG" />
+
+        <!-- Google Maps API Key - Replace with your actual API key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyDNPlLyV_Itv1J4UODhWGWB1teojiLYAeQ" />
 
     </application>
 

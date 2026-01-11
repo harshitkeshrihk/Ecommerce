@@ -12,6 +12,8 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.realtime.Realtime
+import io.github.jan.supabase.realtime.realtime
 import io.github.jan.supabase.serializer.KotlinXSerializer
 import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.storage.storage
@@ -33,6 +35,7 @@ object SupabaseModule {
             install(Postgrest) // This plugin handles the Database
             install(Auth) // <--- Add this line
             install(Storage)
+            install(Realtime) // For real-time location updates
             defaultSerializer = KotlinXSerializer(
                 Json {
                     ignoreUnknownKeys = true // <--- THIS FIXES THE CRASH
@@ -66,5 +69,11 @@ object SupabaseModule {
     @Singleton
     fun provideStorage(client: SupabaseClient): Storage {
         return client.storage // Extracts the Storage plugin from the client
+    }
+
+    @Provides
+    @Singleton
+    fun provideRealtime(client: SupabaseClient): Realtime {
+        return client.realtime // For real-time subscriptions
     }
 }

@@ -1,6 +1,7 @@
 package com.example.vishnu.repository
 
 import android.util.Log
+import com.example.vishnu.model.DeliveryAssignment
 import com.example.vishnu.model.Order
 import com.example.vishnu.model.OrderItemDetail
 import com.example.vishnu.model.ProfileUpdateRequest
@@ -103,6 +104,21 @@ class ProfileRepository @Inject constructor(
             emptyList()
         }
     }
+
+    suspend fun loadDeliveryAssignment(orderId: Long) : List<DeliveryAssignment> = withContext(Dispatchers.IO) {
+        try {
+            postgrest.from("delivery_assignments")
+                    .select {
+                        filter {
+                            eq("order_id", orderId)
+                        }
+                    }
+                    .decodeList<DeliveryAssignment>()
+            } catch (e: Exception) {
+                Log.e("ProfileViewModel", "Error loading assignment", e)
+                emptyList()
+            }
+        }
 
 //    suspend fun getAllOrdersForAdmin(): List<Order> = withContext(Dispatchers.IO) {
 //        try {

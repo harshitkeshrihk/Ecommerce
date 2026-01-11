@@ -2,8 +2,10 @@ package com.example.vishnu.viewModels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vishnu.model.DeliveryPartner
 import com.example.vishnu.model.Order
 import com.example.vishnu.repository.AdminRepository
+import com.example.vishnu.repository.DeliveryRepository
 import com.example.vishnu.repository.ProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -16,7 +18,8 @@ import javax.inject.Inject
 @HiltViewModel
 class AdminViewModel @Inject constructor(
 //    private val repository: ProfileRepository,
-    private val adminRepository: AdminRepository
+    private val adminRepository: AdminRepository,
+    private val deliveryRepository: DeliveryRepository
 ) : ViewModel() {
 
     private val _allOrders = MutableStateFlow<List<Order>>(emptyList())
@@ -34,6 +37,12 @@ class AdminViewModel @Inject constructor(
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading = _isLoading.asStateFlow()
+
+    private val _availablePartners = MutableStateFlow<List<DeliveryPartner>>(emptyList())
+    val availablePartners = _availablePartners.asStateFlow()
+
+    private val _assignmentStatus = MutableStateFlow<String?>(null)
+    val assignmentStatus = _assignmentStatus.asStateFlow()
 
     init {
 //        loadAllOrders()
@@ -83,6 +92,48 @@ class AdminViewModel @Inject constructor(
             } else {
                 _toastMessage.emit("Failed to update status")
             }
+        }
+    }
+
+    fun fetchAvailablePartners() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val partners = deliveryRepository.getAvailablePartners()
+            _availablePartners.value = partners
+            _isLoading.value = false
+        }
+    }
+
+    fun assignOrder(order: Order, partner: DeliveryPartner) {
+        viewModelScope.launch {
+            _isLoading.value = true
+
+            // Hardcoded Store Coordinates (Replace with actual store location from your Store object)
+            val storeLat = 28.7041
+            val storeLng = 77.1025
+
+            // Hardcoded Delivery Coordinates (Ideally geocode the order.shippingAddress)
+            // For now, let's assume we are sending dummy coords for the destination
+            val destLat = 28.5355
+            val destLng = 77.3910
+
+            val success = deliveryRepository.assignOrderToPartner(
+                orderId = order.id,
+                partnerId = partner.id,
+                pickupLat = storeLat,
+                pickupLng = storeLng,
+                destLat = destLat,
+                destLng = destLng
+            )
+
+            if (success) {
+                _toastMessage.emit("Order assigned to ${partner.name}")
+                // Refresh orders to show updated status
+//                loadOrders()
+            } else {
+                _toastMessage.emit("Failed to assign order")
+            }
+            _isLoading.value = false
         }
     }
 }

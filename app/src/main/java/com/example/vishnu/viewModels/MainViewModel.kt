@@ -34,11 +34,11 @@ class MainViewModel @Inject constructor(
             val isLoggedIn = dataStoreManager.isLoggedIn.first()
                 if (isLoggedIn) {
                     val isAdmin  = dataStoreManager.isAdmin.first()
-                        if(isAdmin) {
-                            _startDestination.value = "admin_dashboard"
-                        }else {
-                            _startDestination.value = "catalog"
-                        }
+                    if(isAdmin) {
+                        _startDestination.value = "admin_dashboard"
+                    }else {
+                        _startDestination.value = "catalog"
+                    }
                 } else {
                     _startDestination.value = "auth_screen" // Your Login route
                 }

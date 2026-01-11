@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,15 @@ plugins {
     kotlin("kapt") // Needed for code generation
     id("com.google.dagger.hilt.android")
     id("org.jetbrains.kotlin.plugin.serialization")
+}
+
+fun getLocalProperty(key: String): String {
+    val properties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { properties.load(it) }
+    }
+    return properties.getProperty(key) ?: ""
 }
 
 android {
@@ -21,6 +32,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val mapsKey = getLocalProperty("MAPS_API_KEY")
+        buildConfigField("String", "MAPS_API_KEY", "\"$mapsKey\"")
     }
 
     buildTypes {
@@ -41,6 +55,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -107,4 +122,16 @@ dependencies {
     implementation("com.razorpay:checkout:1.6.33")
 
     implementation("io.github.jan-tennert.supabase:storage-kt:3.0.0") // Check for latest version
+    
+    // Google Maps for Android
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
+    implementation("com.google.maps.android:maps-compose:4.3.0")
+    implementation("com.google.maps.android:maps-compose-utils:4.3.0")
+    
+    // Supabase Realtime for live location updates
+    implementation("io.github.jan-tennert.supabase:realtime-kt:3.0.0")
+
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    // GSON Converter (easiest for parsing Google Maps JSON)
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 }

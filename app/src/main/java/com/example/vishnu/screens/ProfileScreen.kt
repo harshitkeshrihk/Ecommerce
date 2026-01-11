@@ -43,6 +43,7 @@ enum class ProfileSubScreen {
 fun ProfileScreen(
     onLogoutClick: () -> Unit,
     onBackClick: () -> Unit,
+    onTrackOrderClick : (Long) -> Unit,
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     var currentScreen by remember { mutableStateOf(ProfileSubScreen.MENU) }
@@ -64,7 +65,9 @@ fun ProfileScreen(
     Scaffold(
         containerColor = Color(0xFFF5F5F5) // Light Grey Background for modern feel
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()) {
             AnimatedContent(
                 targetState = currentScreen,
                 label = "ProfileNav",
@@ -114,9 +117,15 @@ fun ProfileScreen(
                     }
                     ProfileSubScreen.ORDER_DETAILS -> {
                         if (selectedOrder != null) {
+                            // Note: Navigation to tracking would need to be handled differently
+                            // since we're in a nested navigation. For now, we'll pass null.
+                            // You can implement a callback system if needed.
                             OrderDetailScreen(
                                 order = selectedOrder!!,
-                                onBack = { currentScreen = ProfileSubScreen.ORDERS }
+                                onBack = { currentScreen = ProfileSubScreen.ORDERS },
+                                onTrackOrder = { orderId ->
+                                    onTrackOrderClick(orderId)
+                                }
                             )
                         }
                     }
@@ -303,7 +312,10 @@ fun EditProfileView(
         }
     ) { padding ->
         Column(
-            modifier = Modifier.padding(padding).padding(16.dp).fillMaxSize(),
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             ProfileTextField(value = name, onValueChange = { viewModel.name.value = it }, label = "Full Name", icon = Icons.Default.Person)
@@ -316,7 +328,9 @@ fun EditProfileView(
 
             Button(
                 onClick = { viewModel.saveProfile() },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
                 enabled = !isLoading
             ) {
                 if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
@@ -351,7 +365,9 @@ fun OrdersView(
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()) {
             TabRow(selectedTabIndex = selectedTab) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
@@ -374,7 +390,9 @@ fun OrdersView(
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
-                    modifier = Modifier.fillMaxSize().background(Color(0xFFF5F5F5))
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFFF5F5F5))
                 ) {
                     items(ordersToShow) { order ->
                         // Using the Card we created in previous steps
@@ -426,7 +444,9 @@ fun EmptyStateScreen(
     onBack: (() -> Unit)?
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().background(Color.White),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

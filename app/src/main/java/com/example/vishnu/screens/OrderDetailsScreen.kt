@@ -17,7 +17,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,12 +59,15 @@ import kotlinx.coroutines.launch
 fun OrderDetailScreen(
     order: Order,
     viewModel: ProfileViewModel = hiltViewModel(),
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onTrackOrder: ((Long) -> Unit)? = null // Optional callback for navigation
 ) {
 
     var orderDetails by remember { mutableStateOf<List<OrderItemDetail>>(emptyList()) }
     var isLoadingDetails by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    val deliveryAssignment by viewModel.currentAssignment.collectAsState()
 
     LaunchedEffect(Unit) {
         if (orderDetails.isEmpty()) {
@@ -71,6 +78,10 @@ fun OrderDetailScreen(
                 isLoadingDetails = false
             }
         }
+    }
+
+    LaunchedEffect(order.id) {
+        viewModel.loadDeliveryAssignment(order.id)
     }
 
     Scaffold(
@@ -102,6 +113,60 @@ fun OrderDetailScreen(
             ) {
                 // 1. Live Status Tracker
                 StatusTracker(currentStatus = order.status)
+
+                // Track Order Button (only show if delivery partner is assigned and order is in transit)
+
+                val isTrackable = deliveryAssignment != null &&
+                        (deliveryAssignment?.deliveryStatus == "SHIPPED" ||
+                                deliveryAssignment?.deliveryStatus == "IN_TRANSIT" ||
+                                deliveryAssignment?.deliveryStatus == "OUT_FOR_DELIVERY"||
+                                deliveryAssignment?.deliveryStatus == "PICKED_UP")
+
+                if (isTrackable) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            onTrackOrder?.invoke(order.id)
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.MyLocation,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        "Track Your Order",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        "Live location tracking",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray
+                                    )
+                                }
+                            }
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = Color.Gray
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 

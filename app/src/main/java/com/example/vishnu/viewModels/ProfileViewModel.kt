@@ -1,7 +1,9 @@
 package com.example.vishnu.viewModels
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vishnu.model.DeliveryAssignment
 import com.example.vishnu.model.Order
 import com.example.vishnu.model.OrderItemDetail
 import com.example.vishnu.model.UserAddress
@@ -42,6 +44,9 @@ class ProfileViewModel @Inject constructor(
 
     private val _addresses = MutableStateFlow<List<UserAddress>>(emptyList())
     val addresses = _addresses.asStateFlow()
+
+    private val _currentAssignment = MutableStateFlow<DeliveryAssignment?>(null)
+    val currentAssignment = _currentAssignment.asStateFlow()
 
     init {
         fetchProfile()
@@ -126,4 +131,19 @@ class ProfileViewModel @Inject constructor(
     fun clearStatus() {
         _updateStatus.value = null
     }
+
+    fun loadDeliveryAssignment(orderId: Long) {
+        viewModelScope.launch {
+            try {
+                // Fetch assignment where order_id matches
+                val assignments = repository.loadDeliveryAssignment(orderId)
+                _currentAssignment.value = assignments.firstOrNull()
+            } catch (e: Exception) {
+                Log.e("ProfileViewModel", "Error loading assignment", e)
+                _currentAssignment.value = null
+            }
+        }
+    }
+
+
 }

@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.vishnu.model.DeliveryPartner
 import com.example.vishnu.model.Order
 import com.example.vishnu.utils.last6Digits
 import com.example.vishnu.viewModels.AdminViewModel
@@ -42,6 +43,11 @@ fun AdminDashboardScreen(
     val storeName by viewModel.storeName.collectAsState() // <--- Observe Store Name
     val isLoading by viewModel.isLoading.collectAsState()
     val context = LocalContext.current
+
+    val availablePartners by viewModel.availablePartners.collectAsState()
+
+    var showAssignDialog by remember { mutableStateOf(false) }
+    var selectedOrderForAssignment by remember { mutableStateOf<Order?>(null) }
 
     // Calculate Stats on the fly
     val totalRevenue = orders.sumOf { it.totalAmount }
@@ -194,7 +200,12 @@ fun AdminDashboardScreen(
                     items(orders) { order -> // Show newest first
                         AdminOrderCardEnhanced(order = order, onStatusChange = { newStatus ->
                             viewModel.changeStatus(order.id, newStatus)
-                        })
+                        },
+                            onAssignClick = {
+                                selectedOrderForAssignment = order
+                                viewModel.fetchAvailablePartners()
+                                showAssignDialog = true
+                            })
                     }
                     item {
                         Spacer(modifier = Modifier.height(80.dp)) // Space for FAB
@@ -202,6 +213,16 @@ fun AdminDashboardScreen(
                 }
             }
         }
+    }
+    if (showAssignDialog && selectedOrderForAssignment != null) {
+        DeliveryPartnerSelectionDialog(
+            partners = availablePartners,
+            onDismiss = { showAssignDialog = false },
+            onSelect = { partner ->
+                viewModel.assignOrder(selectedOrderForAssignment!!, partner)
+                showAssignDialog = false
+            }
+        )
     }
 }
 
@@ -238,7 +259,8 @@ fun StatCard(
 @Composable
 fun AdminOrderCardEnhanced(
     order: Order,
-    onStatusChange: (String) -> Unit
+    onStatusChange: (String) -> Unit,
+    onAssignClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val statusOptions = listOf("PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED")
@@ -350,6 +372,61 @@ fun AdminOrderCardEnhanced(
 
             // -- Footer: Actions (Optional) --
             // You can add a "View Details" text button here if you implement order details later.
+            if (order.status == "PROCESSING" || order.status == "PAID") {
+                Button(
+                    onClick = onAssignClick,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                ) {
+                    Icon(Icons.Default.DeliveryDining, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Assign Delivery Partner")
+                }
+            }
         }
     }
+}
+
+// Add this Dialog Composable to your AdminDashboardScreen.kt file
+
+@Composable
+fun DeliveryPartnerSelectionDialog(
+    partners: List<DeliveryPartner>,
+    onDismiss: () -> Unit,
+    onSelect: (DeliveryPartner) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Assign Delivery Partner") },
+        text = {
+            if (partners.isEmpty()) {
+                Text("No available partners found.")
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                    items(partners) { partner ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(partner) }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Person, contentDescription = null)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(partner.name, style = MaterialTheme.typography.bodyLarge)
+                                Text(partner.vehicleType, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            }
+                        }
+                        Divider()
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

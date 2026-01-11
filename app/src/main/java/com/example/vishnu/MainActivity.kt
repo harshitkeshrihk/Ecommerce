@@ -36,6 +36,7 @@ import com.example.vishnu.screens.AdminDashboardScreen
 import com.example.vishnu.screens.AuthScreen
 import com.example.vishnu.screens.CartScreen
 import com.example.vishnu.screens.CatalogScreen
+import com.example.vishnu.screens.LiveTrackingScreen
 import com.example.vishnu.screens.ProductDetailScreen
 import com.example.vishnu.screens.ProfileScreen
 import com.example.vishnu.ui.theme.VishnuTheme
@@ -206,6 +207,9 @@ fun VishnuCrockeryApp(
                     },
                     onBackClick = {
                         navController.popBackStack()
+                    },
+                    onTrackOrderClick = { orderId->
+                        navController.navigate("tracking/$orderId")
                     }
                 )
             }
@@ -231,6 +235,18 @@ fun VishnuCrockeryApp(
                 AddEditProductScreen(
                     productId = backStackEntry.arguments?.getString("productId"),
                     storeId = backStackEntry.arguments?.getString("storeId"),
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            // Live Tracking Screen
+            composable(
+                "tracking/{orderId}",
+                arguments = listOf(navArgument("orderId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val orderId = backStackEntry.arguments?.getLong("orderId") ?: 0L
+                LiveTrackingScreen(
+                    orderId = orderId,
                     onBack = { navController.popBackStack() }
                 )
             }

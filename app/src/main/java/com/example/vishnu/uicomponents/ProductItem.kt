@@ -17,10 +17,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.vishnu.R
 import coil.compose.AsyncImage
 import com.example.vishnu.model.Product
 
@@ -45,6 +47,8 @@ fun ProductItem(
             Box(modifier = Modifier.height(150.dp)) {
                 AsyncImage(
                     model = product.imageUrl,
+                    placeholder = painterResource(id = R.drawable.error_placeholder),
+                    error = painterResource(id = R.drawable.error_placeholder),
                     contentDescription = product.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()

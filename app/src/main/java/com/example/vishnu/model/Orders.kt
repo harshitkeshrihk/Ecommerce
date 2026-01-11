@@ -44,5 +44,8 @@ data class Order( // <--- This is the class for Active/Past lists
     @SerialName("total_amount") val totalAmount: Double,
     val status: String,
     @SerialName("payment_id") val paymentId: String,
-    @SerialName("shipping_address") val shippingAddress: String
+    @SerialName("shipping_address") val shippingAddress: String,
+    @SerialName("delivery_partner_id") val deliveryPartnerId: String? = null,
+    @SerialName("delivery_assignment_id") val deliveryAssignmentId: String? = null,
+    @SerialName("estimated_delivery_time") val estimatedDeliveryTime: String? = null
 )
