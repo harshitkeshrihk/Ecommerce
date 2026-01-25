@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -354,6 +355,10 @@ fun OrdersView(
     val tabs = listOf("Active", "History")
     val activeOrders by viewModel.activeOrders.collectAsState()
     val pastOrders by viewModel.pastOrders.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadOrderData()
+    }
 
     Scaffold(
         topBar = {

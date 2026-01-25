@@ -37,10 +37,10 @@ data class StoreUiModel(
 )
 
 // --- 2. Custom Color Palette (Modern & Premium) ---
-private val ActiveTabContainer = Color(0xFF1A1C1E) // Deep Charcoal / Almost Black
+private val ActiveTabContainer = Color(0xFF9777E7) // Deep Charcoal / Almost Black
 private val ActiveTabContent = Color(0xFFFFFFFF)   // Pure White
 private val InactiveTabContainer = Color(0xFFFFFFFF) // Pure White
-private val InactiveTabContent = Color(0xFF44474F)   // Dark Grey
+private val InactiveTabContent = Color(0xFFAD92F1)   // Dark Grey
 private val InactiveBorder = Color(0xFFE0E2EC)       // Soft Grey Border
 private val AccentDot = Color(0xFF29B6F6)            // Cyan Accent for "Active" indicator
 

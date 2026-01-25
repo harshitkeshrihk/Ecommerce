@@ -110,7 +110,22 @@ fun AdminDashboardScreen(
             }
         }
     ) { padding ->
-        if(isLoading){
+        if (storeName == "Access Denied") {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color.Red)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Access Denied", style = MaterialTheme.typography.titleLarge)
+                Text("We couldn't verify your store profile.", color = Color.Gray)
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = { viewModel.initializeDashboard() }) {
+                    Text("Retry")
+                }
+            }
+        } else if(isLoading){
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }

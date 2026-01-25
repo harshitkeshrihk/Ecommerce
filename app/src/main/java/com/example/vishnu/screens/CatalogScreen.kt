@@ -131,12 +131,12 @@ fun CatalogScreen(
                     windowInsets = WindowInsets(0.dp), // Fix top padding issues
                     actions = {
                         // --- 1. Header (Location & Profile) ---
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                             if (!isSearching) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(16.dp),
+                                        .padding(16.dp,8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -293,7 +293,7 @@ fun CatalogScreen(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(160.dp),
-                contentPadding = PaddingValues(8.dp),
+                contentPadding = PaddingValues(8.dp,0.dp,8.dp,60.dp),
                 modifier = Modifier
                     .padding(paddingValues)
                     .fillMaxSize(),

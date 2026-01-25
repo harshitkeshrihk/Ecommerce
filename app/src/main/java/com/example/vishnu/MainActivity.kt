@@ -37,6 +37,7 @@ import com.example.vishnu.screens.AuthScreen
 import com.example.vishnu.screens.CartScreen
 import com.example.vishnu.screens.CatalogScreen
 import com.example.vishnu.screens.LiveTrackingScreen
+import com.example.vishnu.screens.MainScreen
 import com.example.vishnu.screens.ProductDetailScreen
 import com.example.vishnu.screens.ProfileScreen
 import com.example.vishnu.ui.theme.VishnuTheme
@@ -140,31 +141,48 @@ fun VishnuCrockeryApp(
                 )
             }
             // Screen 1: Catalog
+//            composable("catalog") {
+//                Scaffold(
+//                    floatingActionButton = {
+//                        FloatingActionButton(
+//                            onClick = { navController.navigate("cart") },
+//                            containerColor = MaterialTheme.colorScheme.primary
+//                        ) {
+//                            Icon(Icons.Default.ShoppingCart, contentDescription = "Go to Cart")
+//                        }
+//                    }
+//                ) { padding ->
+//                    // Pass padding to CatalogScreen or handle it
+//                    Box(modifier = Modifier.padding(padding)) {
+//                        CatalogScreen(
+//                            onProductClick = { productId ->
+//                                navController.navigate("detail/$productId")
+//                            },
+//                            onProfileClick = {
+//                                navController.navigate("profile")
+//                            }
+//                        )
+//                    }
+//                }
+//                // Note: You need to update your CatalogScreen to accept a click callback!
+//                // See the instruction below 👇
+//            }
+
+            // Inside VishnuCrockeryApp -> NavHost
+
             composable("catalog") {
-                Scaffold(
-                    floatingActionButton = {
-                        FloatingActionButton(
-                            onClick = { navController.navigate("cart") },
-                            containerColor = MaterialTheme.colorScheme.primary
-                        ) {
-                            Icon(Icons.Default.ShoppingCart, contentDescription = "Go to Cart")
-                        }
+                MainScreen(
+                    onProductClick = { productId ->
+                        navController.navigate("detail/$productId")
+                    },
+                    onCartClick = {
+                        // Navigate to the full screen cart if you prefer
+                        navController.navigate("cart")
+                    },
+                    onProfileClick = {
+                        navController.navigate("profile")
                     }
-                ) { padding ->
-                    // Pass padding to CatalogScreen or handle it
-                    Box(modifier = Modifier.padding(padding)) {
-                        CatalogScreen(
-                            onProductClick = { productId ->
-                                navController.navigate("detail/$productId")
-                            },
-                            onProfileClick = {
-                                navController.navigate("profile")
-                            }
-                        )
-                    }
-                }
-                // Note: You need to update your CatalogScreen to accept a click callback!
-                // See the instruction below 👇
+                )
             }
 
             // Screen 2: Detail

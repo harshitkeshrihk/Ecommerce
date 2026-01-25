@@ -8,6 +8,8 @@ import com.example.vishnu.repository.AdminRepository
 import com.example.vishnu.repository.DeliveryRepository
 import com.example.vishnu.repository.ProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -19,7 +21,8 @@ import javax.inject.Inject
 class AdminViewModel @Inject constructor(
 //    private val repository: ProfileRepository,
     private val adminRepository: AdminRepository,
-    private val deliveryRepository: DeliveryRepository
+    private val deliveryRepository: DeliveryRepository,
+    private val auth: Auth
 ) : ViewModel() {
 
     private val _allOrders = MutableStateFlow<List<Order>>(emptyList())
@@ -46,12 +49,47 @@ class AdminViewModel @Inject constructor(
 
     init {
 //        loadAllOrders()
-        initializeDashboard()
+//        initializeDashboard()
+        observeAuthState()
+    }
+
+    private fun observeAuthState() {
+        viewModelScope.launch {
+            // This flow emits the current status of the session
+            auth.sessionStatus.collect { status ->
+                when (status) {
+                    is SessionStatus.Authenticated -> {
+                        // Only load data once we are surely authenticated
+                        if (currentStoreId == null) { // Prevent reloading if already loaded
+                            initializeDashboard()
+                        }
+                    }
+                    is SessionStatus.NotAuthenticated -> {
+                        _isLoading.value = false
+                        _storeName.value = "Access Denied"
+                        _toastMessage.emit("Please log in again.")
+                    }
+                    is SessionStatus.Initializing -> {
+                        // Keep loading spinner visible
+                        _isLoading.value = true
+                    }
+                    is SessionStatus.RefreshFailure -> {
+                        _isLoading.value = false
+                        _toastMessage.emit("Network error during auth check")
+                    }
+                }
+            }
+        }
     }
 
     fun initializeDashboard() {
         viewModelScope.launch {
             _isLoading.value = true
+
+            if (auth.currentUserOrNull() == null) {
+                _isLoading.value = false
+                return@launch
+            }
 
             // 1. Get My Store Profile
             val myStore = adminRepository.getMyStore()

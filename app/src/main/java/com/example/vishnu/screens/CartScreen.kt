@@ -67,9 +67,9 @@ fun CartScreen(
     val savedAddresses by viewModel.savedAddresses.collectAsState()
     var showAddressSheet by remember { mutableStateOf(false) }
 
-//    LaunchedEffect(Unit) {
-//        viewModel.fetchCartItems()
-//    }
+    LaunchedEffect(Unit) {
+        viewModel.fetchCartItems()
+    }
 
     LaunchedEffect(cartEvent.value) {
         when(val event = cartEvent.value) {
