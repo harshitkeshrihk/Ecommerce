@@ -1,10 +1,12 @@
 package com.example.vishnu.viewModels
 
-import androidx.datastore.dataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vishnu.model.UserRole
+import com.example.vishnu.model.roleEnum
 import com.example.vishnu.repository.AdminRepository
 import com.example.vishnu.repository.AuthRepository
+import com.example.vishnu.repository.ProfileRepository
 import com.example.vishnu.utils.DataStoreManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -18,7 +20,8 @@ import javax.inject.Inject
 class AuthViewModel @Inject constructor(
     private val repository: AuthRepository,
     private val dataStoreManager: DataStoreManager,
-    private val adminRepository: AdminRepository
+    private val adminRepository: AdminRepository,
+    private val profileRepository: ProfileRepository
 ) : ViewModel() {
 
     // Inputs
@@ -59,14 +62,16 @@ class AuthViewModel @Inject constructor(
             try {
                 repository.signIn(email.value, password.value)
 
+                // Owning a store still grants admin access (existing behavior).
+                // Everyone else's access level comes from their profile's role.
                 val myStore = adminRepository.getMyStore()
-                val isStoreOwner = myStore != null
+                val role = if (myStore != null) UserRole.ADMIN else profileRepository.getUserProfile().roleEnum()
 
-                dataStoreManager.saveUserSession(true,isStoreOwner)
+                dataStoreManager.saveUserSession(true, role)
 
-                if(isStoreOwner){
+                if (role == UserRole.ADMIN) {
                     _navigationEvent.emit(AuthDestination.AdminDashboard)
-                }else{
+                } else {
                     _navigationEvent.emit(AuthDestination.Catalog)
                 }
 
@@ -83,17 +88,7 @@ class AuthViewModel @Inject constructor(
             dataStoreManager.clearSession() // Clear local flag
         }
     }
-
-//    fun isAdmin(email: String?): Boolean {
-//        return Constants.ADMIN_EMAILS.contains(email)
-//    }
 }
-
-//object Constants {
-//    val ADMIN_EMAILS = listOf(
-//        "harshitkeshrihk@gmail.com",
-//    )
-//}
 
 // Simple State Wrapper
 sealed class AuthState {

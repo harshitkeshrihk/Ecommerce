@@ -5,7 +5,9 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.vishnu.model.UserRole
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -22,20 +24,13 @@ class DataStoreManager @Inject constructor(
 
     companion object {
         val IS_LOGGED_IN_KEY = booleanPreferencesKey("is_logged_in")
-        val IS_ADMIN_KEY = booleanPreferencesKey("is_admin")
+        val ROLE_KEY = stringPreferencesKey("user_role")
     }
 
-    // Save Login State
-//    suspend fun saveLoginState(isLoggedIn: Boolean) {
-//        context.dataStore.edit { preferences ->
-//            preferences[IS_LOGGED_IN_KEY] = isLoggedIn
-//        }
-//    }
-
-    suspend fun saveUserSession(isLoggedIn: Boolean, isAdmin: Boolean) {
+    suspend fun saveUserSession(isLoggedIn: Boolean, role: UserRole) {
         context.dataStore.edit { preferences ->
             preferences[IS_LOGGED_IN_KEY] = isLoggedIn
-            preferences[IS_ADMIN_KEY] = isAdmin
+            preferences[ROLE_KEY] = role.name
         }
     }
 
@@ -45,10 +40,10 @@ class DataStoreManager @Inject constructor(
             preferences[IS_LOGGED_IN_KEY] ?: false // Default to false
         }
 
-    val isAdmin: Flow<Boolean> = context.dataStore.data
-        .map { preferences ->
-            preferences[IS_ADMIN_KEY] ?: false // Default to false (Customer)
-        }
+    val role: Flow<UserRole> = context.dataStore.data
+        .map { preferences -> UserRole.fromString(preferences[ROLE_KEY]) }
+
+    val isAdmin: Flow<Boolean> = role.map { it == UserRole.ADMIN }
 
     // Clear Data (Useful for Logout)
     suspend fun clearSession() {

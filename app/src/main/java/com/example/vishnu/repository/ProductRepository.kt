@@ -2,7 +2,6 @@ package com.example.vishnu.repository
 
 import android.util.Log
 import com.example.vishnu.model.Product
-import com.example.vishnu.model.Store
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
@@ -15,18 +14,18 @@ class ProductRepository @Inject constructor(
     private val supabase: SupabaseClient,
     private val storage: Storage
 ) {
-    // The Function to get Real Data
-//    suspend fun getProducts(): List<Product> {
-//        return try {
-//            // "products" matches your table name in Supabase
-//            supabase.postgrest["products"]
-//                .select()
-//                .decodeList<Product>()
-//        } catch (e: Exception) {
-//            e.printStackTrace()
-//            emptyList() // Return empty list on error (or handle gracefully)
-//        }
-//    }
+    suspend fun getAllProducts(): List<Product> {
+        return try {
+            supabase.postgrest["products"]
+                .select {
+                    filter { eq("is_available", true) }
+                }
+                .decodeList<Product>()
+        } catch (e: Exception) {
+            Log.e("Repo", "Error fetching products", e)
+            emptyList()
+        }
+    }
 
     suspend fun getProductById(id: String): Product? {
         return try {
@@ -73,33 +72,6 @@ class ProductRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e("Repo", "Upload failed", e)
             return@withContext null
-        }
-    }
-
-    suspend fun getProductsByStore(storeId: String): List<Product> {
-        return try {
-            supabase.postgrest["products"]
-                .select {
-                    filter { eq("store_id", storeId) } // <--- KEY FILTER
-                    filter { eq("is_available", true) }
-                }
-                .decodeList<Product>()
-        } catch (e: Exception) {
-            Log.e("Repo", "Error fetching products for store $storeId", e)
-            emptyList()
-        }
-    }
-
-    suspend fun getStores(): List<Store> {
-        return try {
-            supabase.postgrest["stores"]
-                .select {
-                    filter { eq("is_active", true) } // Only active stores
-                }
-                .decodeList<Store>()
-        } catch (e: Exception) {
-            Log.e("Repo", "Error fetching stores", e)
-            emptyList()
         }
     }
 

@@ -1,7 +1,5 @@
 package com.example.vishnu.screens
 
-import StoreTabs
-import StoreUiModel
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -72,11 +70,7 @@ fun CatalogScreen(
 
     // UI Logic: We are in "Search Mode" if the query is not empty
     val isSearching = searchQuery.isNotEmpty()
-    val showDialog = viewModel.showClearCartDialog
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior() // <--- KEY: Collapsing behavior
-
-    val stores by viewModel.stores.collectAsState()
-    val selectedStoreId by viewModel.selectedStoreId.collectAsState()
 
     val context = LocalContext.current
 
@@ -193,24 +187,12 @@ fun CatalogScreen(
                         }
                     }
                 )
-                if (!isSearching && stores.isNotEmpty()) {
-                    // Map your domain Store object to the UI model if needed,
-                    // or just change PremiumStoreTabs to accept your Store class directly.
+                if (!isSearching) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.primaryContainer)
                     ) {
-
-                        if (stores.isNotEmpty()) {
-                            val uiStores = stores.map { StoreUiModel(it.id, it.name, it.type) }
-                            StoreTabs(
-                                stores = uiStores,
-                                selectedStoreId = selectedStoreId,
-                                onStoreSelected = { viewModel.selectStore(it) }
-                            )
-                        }
-
                         // --- 4. Dynamic Category Tabs ---
                         if (categories.isNotEmpty()) {
                             ScrollableTabRow(
@@ -308,28 +290,6 @@ fun CatalogScreen(
                     )
                 }
             }
-        }
-
-        if (showDialog) {
-            AlertDialog(
-                onDismissRequest = { viewModel.cancelClearCart() },
-                title = { Text("Start new order?") },
-                text = {
-                    Text("Your cart contains items from a different store. Do you want to clear your cart and add this item instead?")
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = { viewModel.confirmClearAndAdd() } // <--- CALLS THE FUNCTION
-                    ) {
-                        Text("Yes, Clear Cart", color = MaterialTheme.colorScheme.error)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.cancelClearCart() }) {
-                        Text("Cancel")
-                    }
-                }
-            )
         }
     }
 }

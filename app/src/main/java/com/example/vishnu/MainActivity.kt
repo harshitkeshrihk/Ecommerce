@@ -35,6 +35,7 @@ import com.example.vishnu.screens.AuthScreen
 import com.example.vishnu.screens.CartScreen
 import com.example.vishnu.screens.CatalogScreen
 import com.example.vishnu.screens.ProductDetailScreen
+import com.example.vishnu.model.UserRole
 import com.example.vishnu.screens.ProfileScreen
 import com.example.vishnu.ui.theme.VishnuTheme
 import com.example.vishnu.utils.DataStoreManager
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     private fun startPayment(amount: Double, email: String, phone: String) {
         // Real Razorpay Code
         val checkout = Checkout()
-        checkout.setKeyID("rzp_test_RvAYVqnRum5bKG") // Replace this!
+        checkout.setKeyID(BuildConfig.RAZORPAY_KEY_ID)
         try {
             val options = JSONObject()
             options.put("name", "Vishnu Crockery")
@@ -107,7 +108,7 @@ fun VishnuCrockeryApp(
 ) {
     val navController = rememberNavController()
     val startDestination by viewModel.startDestination.collectAsState()
-//    val isAdmin by viewModel.isAdmin.collectAsState()
+    val role by viewModel.role.collectAsState()
 
     if(startDestination == null){
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -213,14 +214,24 @@ fun VishnuCrockeryApp(
             }
 
             composable("admin_dashboard") {
-                AdminDashboardScreen(
-                    onAddProductClick = { storeId ->
-                        navController.navigate("add_edit_product?storeId=$storeId")
-                    },
-                    onGoToStoreClick = {
-                        navController.navigate("catalog")
+                // Route-level guard: only Admin can reach the dashboard, even via
+                // a direct navigate() call, stale deep link, or back-stack replay.
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") {
+                            popUpTo("admin_dashboard") { inclusive = true }
+                        }
                     }
-                )
+                } else {
+                    AdminDashboardScreen(
+                        onAddProductClick = { storeId ->
+                            navController.navigate("add_edit_product?storeId=$storeId")
+                        },
+                        onGoToStoreClick = {
+                            navController.navigate("catalog")
+                        }
+                    )
+                }
             }
 
             composable(
@@ -230,11 +241,20 @@ fun VishnuCrockeryApp(
                     navArgument("storeId") { nullable = true }
                 )
             ) { backStackEntry ->
-                AddEditProductScreen(
-                    productId = backStackEntry.arguments?.getString("productId"),
-                    storeId = backStackEntry.arguments?.getString("storeId"),
-                    onBack = { navController.popBackStack() }
-                )
+                // Same guard as admin_dashboard — product create/edit is Admin-only.
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") {
+                            popUpTo("add_edit_product?productId={productId}&storeId={storeId}") { inclusive = true }
+                        }
+                    }
+                } else {
+                    AddEditProductScreen(
+                        productId = backStackEntry.arguments?.getString("productId"),
+                        storeId = backStackEntry.arguments?.getString("storeId"),
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
 
         }

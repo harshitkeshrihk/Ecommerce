@@ -24,7 +24,6 @@ import javax.inject.Singleton
 
 sealed class AddToCartResult {
     object Success : AddToCartResult()
-    object DifferentStoreConflict : AddToCartResult() // <--- The "Cart Conflict" Signal
     data class Error(val message: String) : AddToCartResult()
 }
 
@@ -68,15 +67,6 @@ class CartRepository @Inject constructor(
                 currentCart = fetchCartItems()
             }
 
-            // 1. CHECK FOR STORE CONFLICT
-            // If cart has items, ensure they are from the same store
-            if (currentCart.isNotEmpty()) {
-                val existingStoreId = currentCart.first().product.storeId
-                if (existingStoreId != product.storeId) {
-                    return@withContext AddToCartResult.DifferentStoreConflict
-                }
-            }
-
             val existingItem = currentCart.find { it.product.id == product.id }
 
             if (existingItem != null) {
@@ -103,11 +93,6 @@ class CartRepository @Inject constructor(
             return@withContext AddToCartResult.Error(e.message ?: "Unknown Error")
         }
     }
-    suspend fun clearAndAdd(product: Product) {
-        clearCart()
-        addToCart(product)
-    }
-
     suspend fun removeFromCart(productId: String) = withContext(Dispatchers.IO) {
         try {
             postgrest["cart_items"].delete {

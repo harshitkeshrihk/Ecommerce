@@ -38,11 +38,6 @@ class ProductDetailViewModel @Inject constructor(
     val isAdmin = dataStoreManager.isAdmin
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    var showClearCartDialog by mutableStateOf(false)
-        private set
-
-    private var pendingProductToAdd: Product? = null
-
     private val _toastEvent = Channel<String>()
     val toastEvent = _toastEvent.receiveAsFlow()
 
@@ -74,11 +69,6 @@ class ProductDetailViewModel @Inject constructor(
                         // Optional: Show Success Toast
                         _toastEvent.send("${product.name} added to cart")
                     }
-                    is AddToCartResult.DifferentStoreConflict -> {
-                        // Trigger Dialog
-                        pendingProductToAdd = product
-                        showClearCartDialog = true
-                    }
                     is AddToCartResult.Error -> {
                         // Handle error (log it)
                         _toastEvent.send("Failed to add: ${result.message}")
@@ -89,23 +79,6 @@ class ProductDetailViewModel @Inject constructor(
 
         }
     }
-
-    fun confirmClearAndAdd() {
-        viewModelScope.launch {
-            pendingProductToAdd?.let {
-                cartRepository.clearAndAdd(it)
-                _toastEvent.send("Cart cleared. ${pendingProductToAdd!!.name} added!")
-            }
-            showClearCartDialog = false
-            pendingProductToAdd = null
-        }
-    }
-
-    fun cancelClearCart() {
-        showClearCartDialog = false
-        pendingProductToAdd = null
-    }
-
 
     fun loadProduct(productId: String) {
         viewModelScope.launch {

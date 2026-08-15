@@ -8,7 +8,8 @@ data class UserProfile(
     val id: String, // UUID
     @SerialName("full_name") val fullName: String? = "",
     @SerialName("phone_number") val phoneNumber: String? = "",
-    val address: String? = ""
+    val address: String? = "",
+    val role: String? = "retail" // "retail" | "wholesale" | "distributor" | "admin" — server-assigned, not user-editable
 )
 
 // Request body for updates (We don't send ID, just data)

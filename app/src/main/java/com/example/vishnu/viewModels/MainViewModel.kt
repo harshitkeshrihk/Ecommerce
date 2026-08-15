@@ -2,10 +2,10 @@ package com.example.vishnu.viewModels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vishnu.model.UserRole
 import com.example.vishnu.repository.AuthRepository
 import com.example.vishnu.utils.DataStoreManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,39 +22,21 @@ class MainViewModel @Inject constructor(
     private val _startDestination = MutableStateFlow<String?>(null) // Null means "still loading"
     val startDestination: StateFlow<String?> = _startDestination.asStateFlow()
 
-    val isAdmin = dataStoreManager.isAdmin
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    // Used for route-level guards (e.g. admin_dashboard, add_edit_product)
+    val role = dataStoreManager.role
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserRole.RETAIL)
 
     init {
         viewModelScope.launch {
-            // Optional: Add a small delay if you want to show a Splash Screen logo
-            // delay(1000)
             dataStoreManager.isLoggedIn.collect { isLoggedIn ->
                 if (isLoggedIn) {
-                    dataStoreManager.isAdmin.collect { isAdmin ->
-                        if(isAdmin) {
-                            _startDestination.value = "admin_dashboard"
-                        }else {
-                            _startDestination.value = "catalog"
-                        }
+                    dataStoreManager.role.collect { role ->
+                        _startDestination.value = if (role == UserRole.ADMIN) "admin_dashboard" else "catalog"
                     }
                 } else {
                     _startDestination.value = "auth_screen" // Your Login route
                 }
             }
-
-//            combine(
-//                dataStoreManager.isLoggedIn,
-//                dataStoreManager.isAdmin
-//            ) { isLoggedIn, isAdmin ->
-//                when {
-//                    !isLoggedIn -> "auth_screen"       // Not logged in -> Login
-//                    isAdmin -> "admin_dashboard"       // Logged in & Admin -> Dashboard
-//                    else -> "catalog"                  // Logged in & Customer -> Catalog
-//                }
-//            }.collect { destination ->
-//                _startDestination.value = destination
-//            }  better approach
         }
     }
 }

@@ -6,7 +6,6 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vishnu.model.Product
-import com.example.vishnu.model.Store
 import com.example.vishnu.repository.AddToCartResult
 import com.example.vishnu.repository.CartRepository
 import com.example.vishnu.repository.ProductRepository
@@ -49,17 +48,6 @@ class CatalogViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
-    private val _stores = MutableStateFlow<List<Store>>(emptyList())
-    val stores = _stores.asStateFlow()
-
-    private val _selectedStoreId = MutableStateFlow<String?>(null)
-    val selectedStoreId = _selectedStoreId.asStateFlow()
-
-    var showClearCartDialog by mutableStateOf(false)
-        private set
-
-    private var pendingProductToAdd: Product? = null
-
     private val _toastEvent = Channel<String>()
     val toastEvent = _toastEvent.receiveAsFlow()
 
@@ -93,33 +81,13 @@ class CatalogViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // 1. Fetch Stores
-                val storeList = repository.getStores()
-                _stores.value = storeList
-
-                // 2. Select default store (First one)
-                if (storeList.isNotEmpty()) {
-                    selectStore(storeList[0].id)
-                } else {
-                    _isLoading.value = false // No stores found
-                }
+                val list = repository.getAllProducts()
+                _products.value = list
             } catch (e: Exception) {
                 Log.e("ViewModel", "Error init catalog", e)
+            } finally {
                 _isLoading.value = false
             }
-        }
-    }
-
-    fun selectStore(storeId: String) {
-        _selectedStoreId.value = storeId
-        _selectedCategory.value = "All" // Reset category when switching stores
-
-        viewModelScope.launch {
-            _isLoading.value = true
-            // 3. Fetch products for THIS store only
-            val list = repository.getProductsByStore(storeId)
-            _products.value = list
-            _isLoading.value = false
         }
     }
 
@@ -154,11 +122,6 @@ class CatalogViewModel @Inject constructor(
                         Log.d("Cart", "Item added")
                         _toastEvent.send("${product.name} added to cart")
                     }
-                    is AddToCartResult.DifferentStoreConflict -> {
-                        // 2. CONFLICT FOUND! Save product & Show Dialog
-                        pendingProductToAdd = product
-                        showClearCartDialog = true
-                    }
                     is AddToCartResult.Error -> {
                         Log.e("Cart", "Error: ${result.message}")
                         _toastEvent.send("Failed to add: ${result.message}")
@@ -168,25 +131,6 @@ class CatalogViewModel @Inject constructor(
         }else {
            Log.d("DEBUG_APP", "Product is null!")
         }
-    }
-
-    fun confirmClearAndAdd() {
-        viewModelScope.launch {
-            val product = pendingProductToAdd
-            if (product != null) {
-                // 3. The Actual Call
-                cartRepository.clearAndAdd(product)
-                _toastEvent.send("Cart cleared. ${product.name} added!")
-            }
-            // Reset State
-            showClearCartDialog = false
-            pendingProductToAdd = null
-        }
-    }
-
-    fun cancelClearCart() {
-        showClearCartDialog = false
-        pendingProductToAdd = null
     }
 
     fun fetchLocation() {
