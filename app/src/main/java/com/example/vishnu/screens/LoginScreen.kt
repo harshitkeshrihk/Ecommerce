@@ -39,16 +39,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.vishnu.viewModels.AuthState
 import com.example.vishnu.viewModels.AuthViewModel
-import io.github.jan.supabase.auth.status.SessionStatus
 
 @Composable
 fun AuthScreen(
-    onAuthSuccess: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val authState by viewModel.authState.collectAsState()
-    val sessionStatus by viewModel.sessionStatus.collectAsState(initial = SessionStatus.NotAuthenticated(false))
 
     // Switch between Login and Sign Up
     var isLoginMode by remember { mutableStateOf(true) }
@@ -57,13 +54,6 @@ fun AuthScreen(
     val email by viewModel.email.collectAsState()
     val password by viewModel.password.collectAsState()
     val name by viewModel.fullName.collectAsState()
-
-    // Redirect if authenticated
-    LaunchedEffect(sessionStatus) {
-        if (sessionStatus is SessionStatus.Authenticated) {
-            onAuthSuccess()
-        }
-    }
 
     // Handle Toast messages
     LaunchedEffect(authState) {

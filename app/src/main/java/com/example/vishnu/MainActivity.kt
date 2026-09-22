@@ -143,14 +143,8 @@ fun VishnuCrockeryApp(
                         }
                     }
                 }
-                AuthScreen(
-                    viewModel = authViewModel, // Pass the SAME instance
-                    onAuthSuccess = {
-                        // User is logged in, now trigger the Admin Check.
-                        // This will fire the navigationEvent above when done.
-                        authViewModel.onSignIn()
-                    }
-                )
+                // Login button -> onSignIn() -> navigationEvent above handles routing.
+                AuthScreen(viewModel = authViewModel) // Pass the SAME instance
             }
             // Screen 1: Catalog
             composable("catalog") {

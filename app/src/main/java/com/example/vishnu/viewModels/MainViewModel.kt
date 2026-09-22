@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -27,19 +28,19 @@ class MainViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserRole.RETAIL)
 
     init {
+        // Resolve the start destination ONCE at app launch. It must not track
+        // later DataStore writes: changing NavHost's startDestination rebuilds
+        // the graph, so a login (which saves the session) would re-mount the
+        // landing screen on top of the navigationEvent-driven navigation.
         viewModelScope.launch {
-            dataStoreManager.isLoggedIn.collect { isLoggedIn ->
-                if (isLoggedIn) {
-                    dataStoreManager.role.collect { role ->
-                        _startDestination.value = when (role) {
-                            UserRole.ADMIN -> "admin_dashboard"
-                            UserRole.WHOLESALE, UserRole.DISTRIBUTOR -> "wholesale_home"
-                            else -> "catalog"
-                        }
-                    }
-                } else {
-                    _startDestination.value = "auth_screen" // Your Login route
+            _startDestination.value = if (dataStoreManager.isLoggedIn.first()) {
+                when (dataStoreManager.role.first()) {
+                    UserRole.ADMIN -> "admin_dashboard"
+                    UserRole.WHOLESALE, UserRole.DISTRIBUTOR -> "wholesale_home"
+                    else -> "catalog"
                 }
+            } else {
+                "auth_screen" // Your Login route
             }
         }
     }
