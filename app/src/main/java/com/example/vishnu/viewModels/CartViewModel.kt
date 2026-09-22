@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vishnu.model.CartItem
+import com.example.vishnu.model.retailTotal
 import com.example.vishnu.repository.CartRepository
 import com.example.vishnu.repository.ProfileRepository
 import com.example.vishnu.utils.LocationManager
@@ -66,7 +67,7 @@ class CartViewModel @Inject constructor(
 
     // 2. Calculated Total Price (Updates automatically)
     val totalPrice: StateFlow<Double> = cartItems.map { items ->
-        items.sumOf { it.product.priceRetail * it.quantity }
+        items.retailTotal()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     fun fetchCartItems(){
@@ -123,10 +124,7 @@ class CartViewModel @Inject constructor(
                 return@launch
             }
 
-            var freshCartPrice: Double = 0.0
-            freshItems.forEach { items ->
-                freshCartPrice += items.product.priceRetail * items.quantity
-            }
+            val freshCartPrice = freshItems.retailTotal()
 
             val profile = profileRepository.getUserProfile()
             val address = profile?.address ?: "AddressNotProvided"
@@ -168,7 +166,7 @@ class CartViewModel @Inject constructor(
             "▪ ${item.product.name} (x${item.quantity}) - ₹${(item.product.priceRetail * item.quantity).toInt()}"
         }
 
-        val total = items.sumOf { it.product.priceRetail * it.quantity }
+        val total = items.retailTotal()
 
         val message = """
             👋 *New Order Request*

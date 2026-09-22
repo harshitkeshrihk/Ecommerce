@@ -183,4 +183,6 @@ Bugs found and fixed during that testing pass, for the record:
 - `quotes.price_per_unit` was one value for the whole RFQ, which breaks for any RFQ spanning more than one product. Restructured to a `quote_items` child table, one price per RFQ line.
 - The admin product form had `unit_of_measure` state with no UI control to actually change it.
 
-Not yet done: crash reporting/analytics (needs a real Firebase project — none exists in this repo, see Doc 4 original scope note) and an automated regression suite for cart/checkout/order-creation beyond the pure-logic unit tests already in `app/src/test` (`PricingResolverTest`, `OrderSummaryTest`) — `CartRepository` has no seam for mocking Postgrest yet.
+Cart/checkout/order-creation regression suite: done. Supabase access for the cart and order paths now goes through `CartDataSource`/`OrderDataSource`/`CurrentUserProvider` (`repository/DataSources.kt`), and `CartRepositoryTest` + `QuickOrderRepositoryTest` exercise the real repositories against in-memory fakes (`./gradlew :app:testDebugUnitTest`). RFQ `acceptQuote` is not yet behind the seam. Known gap recorded by a test: if `order_items` insert fails, the parent `orders` row is left behind (no rollback).
+
+Not yet done: crash reporting/analytics (needs a real Firebase project — none exists in this repo, see Doc 4 original scope note).
