@@ -24,3 +24,11 @@ fun formatIsoDate(isoString: String): String {
 fun last6Digits(value: Long): Long {
     return kotlin.math.abs(value) % 1_000_000
 }
+
+/** ₹ with Indian digit grouping (₹1,23,456), paise shown only when non-zero. */
+fun formatRupees(amount: Double): String {
+    val format = java.text.NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+    format.maximumFractionDigits = if (amount % 1.0 == 0.0) 0 else 2
+    format.minimumFractionDigits = format.maximumFractionDigits
+    return format.format(amount)
+}

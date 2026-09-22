@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.RequestQuote
 import androidx.compose.material3.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 fun WholesaleHomeScreen(
     onQuickOrderClick: () -> Unit,
     onRequestQuoteClick: () -> Unit,
+    onGiftingClick: () -> Unit,
     onProfileClick: () -> Unit
 ) {
     Scaffold(
@@ -56,6 +58,12 @@ fun WholesaleHomeScreen(
                 title = "Request a Quote",
                 subtitle = "Negotiate pricing for a custom order",
                 onClick = onRequestQuoteClick
+            )
+            WholesaleHomeCard(
+                icon = Icons.Outlined.CardGiftcard,
+                title = "Bulk Gifting",
+                subtitle = "Return-gift packs for functions & events",
+                onClick = onGiftingClick
             )
         }
     }

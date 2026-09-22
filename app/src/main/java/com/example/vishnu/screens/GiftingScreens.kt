@@ -1,0 +1,383 @@
+package com.example.vishnu.screens
+
+import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.vishnu.model.GiftPack
+import com.example.vishnu.model.GiftingRules
+import com.example.vishnu.uicomponents.GiftProductPickerDialog
+import com.example.vishnu.uicomponents.PackContentsEditor
+import com.example.vishnu.utils.formatRupees
+import com.example.vishnu.viewModels.GiftPackBuilderViewModel
+import com.example.vishnu.viewModels.GiftingHomeViewModel
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+
+// ---------------------------------------------------------------------
+// Gifting home: pick a ready-made pack (filtered by budget) or build your own
+// ---------------------------------------------------------------------
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GiftingHomeScreen(
+    onBack: () -> Unit,
+    onPackClick: (packId: String) -> Unit,
+    onBuildOwnClick: () -> Unit,
+    viewModel: GiftingHomeViewModel = hiltViewModel()
+) {
+    val packs by viewModel.visiblePacks.collectAsState()
+    val selectedTier by viewModel.selectedTier.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Bulk Gifting")
+                        Text(
+                            "Return gifts for functions, festivals & events",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.padding(padding).fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { onBuildOwnClick() },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Build your own pack", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Choose any items from the gifting collection",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null)
+                    }
+                }
+            }
+            item {
+                Text("Ready-made packs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedTier == null,
+                        onClick = { viewModel.selectTier(null) },
+                        label = { Text("All budgets") }
+                    )
+                    GiftingRules.BUDGET_TIERS.forEach { tier ->
+                        FilterChip(
+                            selected = selectedTier == tier,
+                            onClick = { viewModel.selectTier(tier) },
+                            label = { Text(tier.label) }
+                        )
+                    }
+                }
+            }
+            when {
+                isLoading -> item {
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                packs.isEmpty() -> item {
+                    Text(
+                        "No ready-made packs in this budget yet — try building your own.",
+                        color = Color.Gray,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                }
+                else -> items(packs, key = { it.id }) { pack ->
+                    GiftPackCard(pack, onClick = { onPackClick(pack.id) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GiftPackCard(pack: GiftPack, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(pack.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(
+                    "${formatRupees(pack.toDraft().pricePerPack)} / pack",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            pack.description?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                pack.items.joinToString(" · ") { "${it.qty} × ${it.product.name}" },
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Bulk Pack Builder: contents → quantity → personalization → ship-by → pay
+// ---------------------------------------------------------------------
+
+private val displayDate = DateTimeFormatter.ofPattern("dd MMM yyyy")
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GiftPackBuilderScreen(
+    packId: String?,
+    onBack: () -> Unit,
+    onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit,
+    onOrderPlaced: () -> Unit,
+    viewModel: GiftPackBuilderViewModel = hiltViewModel()
+) {
+    val context = LocalContext.current
+    val draft by viewModel.draft.collectAsState()
+    val packCountText by viewModel.packCountText.collectAsState()
+    val personalization by viewModel.personalization.collectAsState()
+    val shipByDate by viewModel.shipByDate.collectAsState()
+    val address by viewModel.address.collectAsState()
+    val total by viewModel.total.collectAsState()
+    val giftingProducts by viewModel.giftingProducts.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val isProcessing by viewModel.isProcessing.collectAsState()
+
+    var showPicker by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var placedOrderId by remember { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(packId) { viewModel.load(packId) }
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is GiftPackBuilderViewModel.BuilderEvent.LaunchPayment ->
+                    onInitiatePayment(event.amount, event.email, event.phone)
+                is GiftPackBuilderViewModel.BuilderEvent.Message ->
+                    Toast.makeText(context, event.text, Toast.LENGTH_LONG).show()
+                is GiftPackBuilderViewModel.BuilderEvent.OrderPlaced ->
+                    placedOrderId = event.orderId
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (packId == null) "Build your pack" else "Customize pack") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                }
+            )
+        },
+        bottomBar = {
+            Surface(shadowElevation = 8.dp) {
+                Row(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Total", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(formatRupees(total), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    }
+                    Button(onClick = { viewModel.checkout() }, enabled = !isProcessing && !isLoading) {
+                        if (isProcessing) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Pay & place order")
+                        }
+                    }
+                }
+            }
+        }
+    ) { padding ->
+        if (isLoading) {
+            Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+        Column(
+            Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            SectionTitle("1. What's in each pack")
+            OutlinedTextField(
+                value = draft.name,
+                onValueChange = viewModel::rename,
+                label = { Text("Pack name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            PackContentsEditor(
+                lines = draft.lines,
+                onQtyChange = viewModel::setQtyPerPack,
+                onAddItemClick = { showPicker = true }
+            )
+            Text(
+                "Price per pack: ${formatRupees(draft.pricePerPack)}",
+                fontWeight = FontWeight.SemiBold
+            )
+
+            SectionTitle("2. How many packs")
+            OutlinedTextField(
+                value = packCountText,
+                onValueChange = { viewModel.packCountText.value = it.filter(Char::isDigit).take(6) },
+                label = { Text("Number of packs") },
+                supportingText = { Text("Minimum ${GiftingRules.MIN_PACK_COUNT} packs") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            SectionTitle("3. Personalization (optional)")
+            OutlinedTextField(
+                value = personalization,
+                onValueChange = { viewModel.personalization.value = it.take(GiftingRules.MAX_PERSONALIZATION_LENGTH) },
+                label = { Text("Name, initials or date to engrave") },
+                placeholder = { Text("e.g. Sharma Family · Griha Pravesh 2027") },
+                supportingText = { Text("${personalization.length}/${GiftingRules.MAX_PERSONALIZATION_LENGTH}") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            SectionTitle("4. Ship-by date")
+            OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(shipByDate?.format(displayDate) ?: "Choose the date you need it shipped by")
+            }
+
+            SectionTitle("5. Delivery address")
+            OutlinedTextField(
+                value = address,
+                onValueChange = { viewModel.address.value = it },
+                label = { Text("Address") },
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (showPicker) {
+        GiftProductPickerDialog(
+            products = giftingProducts,
+            onPick = { viewModel.addProduct(it); showPicker = false },
+            onDismiss = { showPicker = false }
+        )
+    }
+
+    if (showDatePicker) {
+        ShipByDatePickerDialog(
+            initial = shipByDate,
+            onPicked = { viewModel.shipByDate.value = it; showDatePicker = false },
+            onDismiss = { showDatePicker = false }
+        )
+    }
+
+    placedOrderId?.let { orderId ->
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {
+                TextButton(onClick = { placedOrderId = null; onOrderPlaced() }) { Text("Done") }
+            },
+            title = { Text("Order placed") },
+            text = { Text("Your gifting order #$orderId is confirmed. You can track it under My Orders.") }
+        )
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Spacer(Modifier.height(20.dp))
+    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(8.dp))
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShipByDatePickerDialog(
+    initial: LocalDate?,
+    onPicked: (LocalDate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    // DatePicker works in UTC millis at midnight.
+    val tomorrowUtc = LocalDate.now().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = initial?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= tomorrowUtc
+        }
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    state.selectedDateMillis?.let {
+                        onPicked(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate())
+                    }
+                },
+                enabled = state.selectedDateMillis != null
+            ) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    ) {
+        DatePicker(state = state)
+    }
+}

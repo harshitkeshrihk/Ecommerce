@@ -2,6 +2,7 @@ package com.example.vishnu.repository
 
 import com.example.vishnu.model.CartRequest
 import com.example.vishnu.model.CartResponse
+import com.example.vishnu.model.GiftingOrderRequest
 import com.example.vishnu.model.OrderItemRequest
 import com.example.vishnu.model.OrderRequest
 import com.example.vishnu.model.OrderResponse
@@ -32,6 +33,10 @@ interface OrderDataSource {
     /** Inserts the parent order and returns its new id. */
     suspend fun insertOrder(request: OrderRequest): Long
     suspend fun insertOrderItems(items: List<OrderItemRequest>)
+}
+
+interface GiftingOrderDataSource {
+    suspend fun insertGiftingOrder(request: GiftingOrderRequest)
 }
 
 @Singleton
@@ -90,5 +95,15 @@ class SupabaseOrderDataSource @Inject constructor(
 
     override suspend fun insertOrderItems(items: List<OrderItemRequest>) {
         postgrest["order_items"].insert(items)
+    }
+}
+
+@Singleton
+class SupabaseGiftingOrderDataSource @Inject constructor(
+    private val postgrest: Postgrest
+) : GiftingOrderDataSource {
+
+    override suspend fun insertGiftingOrder(request: GiftingOrderRequest) {
+        postgrest["gifting_orders"].insert(request)
     }
 }

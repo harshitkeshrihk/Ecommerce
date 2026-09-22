@@ -31,6 +31,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.vishnu.screens.AddEditProductScreen
 import com.example.vishnu.screens.AdminDashboardScreen
+import com.example.vishnu.screens.AdminGiftPackEditScreen
+import com.example.vishnu.screens.AdminGiftPacksScreen
+import com.example.vishnu.screens.AdminGiftingOrdersScreen
+import com.example.vishnu.screens.GiftPackBuilderScreen
+import com.example.vishnu.screens.GiftingHomeScreen
 import com.example.vishnu.screens.AdminQuotePipelineScreen
 import com.example.vishnu.screens.AuthScreen
 import com.example.vishnu.screens.CartScreen
@@ -44,6 +49,10 @@ import com.example.vishnu.model.UserRole
 import com.example.vishnu.screens.ProfileScreen
 import com.example.vishnu.ui.theme.VishnuTheme
 import com.example.vishnu.utils.DataStoreManager
+import com.example.vishnu.utils.PaymentPurpose
+import com.example.vishnu.utils.PaymentResult
+import com.example.vishnu.utils.PaymentRouter
+import javax.inject.Inject
 import com.example.vishnu.viewModels.AuthViewModel
 import com.example.vishnu.viewModels.CartViewModel
 import com.example.vishnu.viewModels.MainViewModel
@@ -57,6 +66,8 @@ import org.json.JSONObject
 class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     private val cartViewModel: CartViewModel by viewModels()
+
+    @Inject lateinit var paymentRouter: PaymentRouter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,24 +94,36 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
             options.put("name", "Vishnu Crockery")
             options.put("description", "Payment for Order")
             options.put("currency", "INR")
-            options.put("amount", (amount * 100).toInt()) // Paise
+            options.put("amount", Math.round(amount * 100)) // Paise (rounded, not truncated)
             options.put("prefill.email", email)
             options.put("prefill.contact", phone)
             checkout.open(this, options)
         } catch (e: Exception) {
             Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+            if (paymentRouter.consumePurpose() == PaymentPurpose.GIFTING) {
+                paymentRouter.deliverGifting(PaymentResult.Failure(e.message ?: "Could not open payment"))
+            }
         }
     }
 
     override fun onPaymentSuccess(razorpayPaymentID: String?, paymentData: PaymentData?) {
         Toast.makeText(this, "Payment Successful!", Toast.LENGTH_SHORT).show()
+        val purpose = paymentRouter.consumePurpose()
         if (razorpayPaymentID != null) {
-            cartViewModel.onPaymentSuccess(razorpayPaymentID)
+            when (purpose) {
+                PaymentPurpose.CART -> cartViewModel.onPaymentSuccess(razorpayPaymentID)
+                PaymentPurpose.GIFTING -> paymentRouter.deliverGifting(PaymentResult.Success(razorpayPaymentID))
+            }
+        } else if (purpose == PaymentPurpose.GIFTING) {
+            paymentRouter.deliverGifting(PaymentResult.Failure("Payment ID missing"))
         }
     }
 
     override fun onPaymentError(code: Int, response: String?, paymentData: PaymentData?) {
         Toast.makeText(this, "Payment Failed: $response", Toast.LENGTH_SHORT).show()
+        if (paymentRouter.consumePurpose() == PaymentPurpose.GIFTING) {
+            paymentRouter.deliverGifting(PaymentResult.Failure(response ?: "Payment failed"))
+        }
     }
 
 }
@@ -166,6 +189,9 @@ fun VishnuCrockeryApp(
                             },
                             onProfileClick = {
                                 navController.navigate("profile")
+                            },
+                            onGiftingClick = {
+                                navController.navigate("gifting_home")
                             }
                         )
                     }
@@ -239,6 +265,9 @@ fun VishnuCrockeryApp(
                         },
                         onQuotePipelineClick = {
                             navController.navigate("admin_quote_pipeline")
+                        },
+                        onGiftPacksClick = {
+                            navController.navigate("admin_gift_packs")
                         }
                     )
                 }
@@ -270,8 +299,77 @@ fun VishnuCrockeryApp(
                 WholesaleHomeScreen(
                     onQuickOrderClick = { navController.navigate("quick_order_pad") },
                     onRequestQuoteClick = { navController.navigate("rfq_screen") },
+                    onGiftingClick = { navController.navigate("gifting_home") },
                     onProfileClick = { navController.navigate("profile") }
                 )
+            }
+
+            // --- Bulk Gifting (Phase 2) — any signed-in user ---
+
+            composable("gifting_home") {
+                GiftingHomeScreen(
+                    onBack = { navController.popBackStack() },
+                    onPackClick = { packId -> navController.navigate("gift_pack_builder?packId=$packId") },
+                    onBuildOwnClick = { navController.navigate("gift_pack_builder") }
+                )
+            }
+
+            composable(
+                route = "gift_pack_builder?packId={packId}",
+                arguments = listOf(navArgument("packId") { nullable = true })
+            ) { backStackEntry ->
+                GiftPackBuilderScreen(
+                    packId = backStackEntry.arguments?.getString("packId"),
+                    onBack = { navController.popBackStack() },
+                    onInitiatePayment = onInitiatePayment,
+                    onOrderPlaced = { navController.popBackStack("gifting_home", inclusive = false) }
+                )
+            }
+
+            composable("admin_gift_packs") {
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") { popUpTo("admin_gift_packs") { inclusive = true } }
+                    }
+                } else {
+                    AdminGiftPacksScreen(
+                        onBack = { navController.popBackStack() },
+                        onEditPack = { packId ->
+                            navController.navigate(
+                                if (packId == null) "admin_gift_pack_edit" else "admin_gift_pack_edit?packId=$packId"
+                            )
+                        },
+                        onGiftingOrdersClick = { navController.navigate("admin_gifting_orders") }
+                    )
+                }
+            }
+
+            composable(
+                route = "admin_gift_pack_edit?packId={packId}",
+                arguments = listOf(navArgument("packId") { nullable = true })
+            ) { backStackEntry ->
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") {
+                            popUpTo("admin_gift_pack_edit?packId={packId}") { inclusive = true }
+                        }
+                    }
+                } else {
+                    AdminGiftPackEditScreen(
+                        packId = backStackEntry.arguments?.getString("packId"),
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+
+            composable("admin_gifting_orders") {
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") { popUpTo("admin_gifting_orders") { inclusive = true } }
+                    }
+                } else {
+                    AdminGiftingOrdersScreen(onBack = { navController.popBackStack() })
+                }
             }
 
             composable("quick_order_pad") {

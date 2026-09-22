@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.PendingActions
@@ -40,6 +41,7 @@ fun AdminDashboardScreen(
     onGoToStoreClick: () -> Unit,
     onKycQueueClick: () -> Unit,
     onQuotePipelineClick: () -> Unit,
+    onGiftPacksClick: () -> Unit,
     viewModel: AdminViewModel = hiltViewModel()
 ) {
     val orders by viewModel.allOrders.collectAsState()
@@ -86,6 +88,9 @@ fun AdminDashboardScreen(
                     }
                     IconButton(onClick = onQuotePipelineClick) {
                         Icon(Icons.Outlined.RequestQuote, contentDescription = "Quote Pipeline")
+                    }
+                    IconButton(onClick = onGiftPacksClick) {
+                        Icon(Icons.Outlined.CardGiftcard, contentDescription = "Gift Packs")
                     }
                     OutlinedButton(
                         onClick = onGoToStoreClick,

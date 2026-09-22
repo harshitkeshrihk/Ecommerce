@@ -51,6 +51,7 @@ fun AddEditProductScreen(
     val weight by viewModel.weight.collectAsState()
     val imageUrl by viewModel.imageUrl.collectAsState()
     val isAvailable by viewModel.isAvailable.collectAsState()
+    val isGiftable by viewModel.isGiftable.collectAsState()
     val wholesalePrice by viewModel.wholesalePrice.collectAsState()
     val unitOfMeasure by viewModel.unitOfMeasure.collectAsState()
     val moqSlabs by viewModel.moqSlabs.collectAsState()
@@ -247,6 +248,26 @@ fun AddEditProductScreen(
                     Switch(
                         checked = isAvailable,
                         onCheckedChange = { viewModel.isAvailable.value = it }
+                    )
+                }
+
+                // --- Gifting collection (Phase 2) ---
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Suitable for gifting?", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Shows in the gifting collection and can be added to gift packs",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                    Switch(
+                        checked = isGiftable,
+                        onCheckedChange = { viewModel.isGiftable.value = it }
                     )
                 }
 

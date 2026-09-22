@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
@@ -59,6 +60,7 @@ import com.google.accompanist.permissions.rememberPermissionState
 fun CatalogScreen(
     onProductClick: (String) ->Unit,
     onProfileClick: () -> Unit,
+    onGiftingClick: () -> Unit,
     viewModel: CatalogViewModel = hiltViewModel()
 ) {
     val products by viewModel.filteredProducts.collectAsState()
@@ -154,6 +156,13 @@ fun CatalogScreen(
                                                 alpha = 0.7f
                                             ),
                                             maxLines = 1
+                                        )
+                                    }
+                                    IconButton(onClick = onGiftingClick) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.CardGiftcard,
+                                            contentDescription = "Bulk Gifting",
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                     }
                                     IconButton(onClick = onProfileClick) {

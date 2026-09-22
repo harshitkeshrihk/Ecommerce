@@ -2,9 +2,11 @@ package com.example.vishnu.di
 
 import com.example.vishnu.repository.CartDataSource
 import com.example.vishnu.repository.CurrentUserProvider
+import com.example.vishnu.repository.GiftingOrderDataSource
 import com.example.vishnu.repository.OrderDataSource
 import com.example.vishnu.repository.SupabaseCartDataSource
 import com.example.vishnu.repository.SupabaseCurrentUserProvider
+import com.example.vishnu.repository.SupabaseGiftingOrderDataSource
 import com.example.vishnu.repository.SupabaseOrderDataSource
 import dagger.Binds
 import dagger.Module
@@ -23,4 +25,7 @@ abstract class DataSourceModule {
 
     @Binds
     abstract fun bindOrderDataSource(impl: SupabaseOrderDataSource): OrderDataSource
+
+    @Binds
+    abstract fun bindGiftingOrderDataSource(impl: SupabaseGiftingOrderDataSource): GiftingOrderDataSource
 }

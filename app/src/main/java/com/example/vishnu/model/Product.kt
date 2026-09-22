@@ -1,5 +1,7 @@
 package com.example.vishnu.model
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -44,7 +46,15 @@ data class Product(
     val attributes: Map<String, String>? = null,
 
     @SerialName("unit_of_measure")
-    val unitOfMeasure: String = "piece" // piece | dozen | kg | set — used by the Quick-Order Pad
+    val unitOfMeasure: String = "piece", // piece | dozen | kg | set — used by the Quick-Order Pad
+
+    // Phase 2 — "gifting" puts the SKU in the gifting collection. @EncodeDefault
+    // because SupabaseModule's Json drops default-valued fields: without it,
+    // clearing the last tag (back to emptyList) would never reach the upsert.
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault
+    @SerialName("category_tags")
+    val categoryTags: List<String> = emptyList()
 
 )
 

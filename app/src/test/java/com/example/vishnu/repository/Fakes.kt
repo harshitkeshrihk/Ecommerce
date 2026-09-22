@@ -93,3 +93,14 @@ class FakeOrderDataSource : OrderDataSource {
         this.items += items
     }
 }
+
+/** In-memory stand-in for the `gifting_orders` table. */
+class FakeGiftingOrderDataSource : GiftingOrderDataSource {
+    val rows = mutableListOf<com.example.vishnu.model.GiftingOrderRequest>()
+    var failInsert = false
+
+    override suspend fun insertGiftingOrder(request: com.example.vishnu.model.GiftingOrderRequest) {
+        if (failInsert) error("gifting_orders insert rejected")
+        rows += request
+    }
+}

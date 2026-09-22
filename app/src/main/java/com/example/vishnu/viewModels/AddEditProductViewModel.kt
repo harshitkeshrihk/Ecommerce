@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vishnu.model.GIFTING_TAG
 import com.example.vishnu.model.MoqSlab
 import com.example.vishnu.model.Product
 import com.example.vishnu.repository.PricingRepository
@@ -35,6 +36,10 @@ class AddEditProductViewModel @Inject constructor(
     var category = MutableStateFlow("General")
     var imageUrl = MutableStateFlow("")
     var isAvailable = MutableStateFlow(true)
+    var isGiftable = MutableStateFlow(false) // Phase 2 — "gifting" category tag
+
+    // Tags other than "gifting" are preserved untouched on save.
+    private var loadedTags: List<String> = emptyList()
 
     var selectedImageUri = MutableStateFlow<Uri?>(null)
 
@@ -95,6 +100,8 @@ class AddEditProductViewModel @Inject constructor(
                 category.value = it.category ?: "General"
                 imageUrl.value = it.imageUrl ?: ""
                 isAvailable.value = it.isAvailable ?: true
+                loadedTags = it.categoryTags
+                isGiftable.value = GIFTING_TAG in it.categoryTags
             }
             _moqSlabs.value = pricingRepository.getSlabsForProduct(productId)
             _isLoading.value = false
@@ -168,7 +175,9 @@ class AddEditProductViewModel @Inject constructor(
                 videoUrl = null,
                 isBestseller = false,
                 createdAt = Instant.now().toString(),
-                storeId = currentStoreId!!
+                storeId = currentStoreId!!,
+                categoryTags = loadedTags.filterNot { it == GIFTING_TAG } +
+                    if (isGiftable.value) listOf(GIFTING_TAG) else emptyList()
             )
 
             val success = repository.upsertProduct(productToSave)
