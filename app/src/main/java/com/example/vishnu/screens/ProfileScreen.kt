@@ -35,7 +35,7 @@ import com.example.vishnu.viewModels.ProfileViewModel
 
 // Enum to manage internal navigation
 enum class ProfileSubScreen {
-    MENU, EDIT_PROFILE, ORDERS, WISHLIST
+    MENU, EDIT_PROFILE, ORDERS, WISHLIST, BUSINESS_ACCOUNT
 }
 
 @OptIn(ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
@@ -106,6 +106,12 @@ fun ProfileScreen(
                             onBack = { currentScreen = ProfileSubScreen.MENU }
                         )
                     }
+                    ProfileSubScreen.BUSINESS_ACCOUNT -> {
+                        BusinessAccountView(
+                            viewModel = viewModel,
+                            onBack = { currentScreen = ProfileSubScreen.MENU }
+                        )
+                    }
                 }
             }
         }
@@ -126,6 +132,8 @@ fun DashboardView(
     // Observe Profile Data
     val name by viewModel.name.collectAsState()
     val phone by viewModel.phone.collectAsState()
+    val currentRole by viewModel.currentRole.collectAsState()
+    val kycStatus by viewModel.kycStatus.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
         // --- Header Section ---
@@ -195,6 +203,23 @@ fun DashboardView(
                 subtitle = "Contact customer care",
                 onClick = onSupportClick
             )
+
+            // Wholesale/Distributor KYC entry point — Phase 1. Retail-only
+            // users see this as an "apply" card; already-business accounts
+            // (or ones with a pending/rejected application) see their status.
+            if (currentRole == "retail" || kycStatus != null) {
+                MenuOptionCard(
+                    icon = Icons.Outlined.Storefront,
+                    title = if (currentRole != "retail") "Business Account" else "Wholesale / Distributor Account",
+                    subtitle = when {
+                        currentRole != "retail" -> "Approved — $currentRole pricing active"
+                        kycStatus == "pending" -> "Application under review"
+                        kycStatus == "rejected" -> "Application rejected — tap for details"
+                        else -> "Apply for bulk/MOQ pricing"
+                    },
+                    onClick = { onNavigate(ProfileSubScreen.BUSINESS_ACCOUNT) }
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -351,6 +376,116 @@ fun OrdersView(
                     items(ordersToShow) { order ->
                         // Using the Card we created in previous steps
                         OrderItemCard(order = order, viewModel = viewModel)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------
+// 4. BUSINESS ACCOUNT VIEW (Phase 1 — Wholesale/Distributor KYC)
+// ------------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BusinessAccountView(
+    viewModel: ProfileViewModel,
+    onBack: () -> Unit
+) {
+    val currentRole by viewModel.currentRole.collectAsState()
+    val kycStatus by viewModel.kycStatus.collectAsState()
+    val kycRejectionReason by viewModel.kycRejectionReason.collectAsState()
+    val kycRole by viewModel.kycRole.collectAsState()
+    val kycGstin by viewModel.kycGstin.collectAsState()
+    val kycBusinessName by viewModel.kycBusinessName.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val submitStatus by viewModel.kycSubmitStatus.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(submitStatus) {
+        submitStatus?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearKycSubmitStatus()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Business Account") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier.padding(padding).padding(16.dp).fillMaxSize()
+        ) {
+            when {
+                currentRole != "retail" -> {
+                    Text("You're approved!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Your account is approved as a ${currentRole.replaceFirstChar { it.uppercase() }} partner. MOQ pricing is applied automatically on the Quick-Order Pad.",
+                        color = Color.Gray
+                    )
+                }
+                kycStatus == "pending" -> {
+                    Text("Application under review", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("We've received your GSTIN and business details. You'll be able to place wholesale orders once an admin approves it.", color = Color.Gray)
+                }
+                else -> {
+                    if (kycStatus == "rejected" && !kycRejectionReason.isNullOrBlank()) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text("Application rejected", fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                                Text(kycRejectionReason ?: "", color = Color(0xFFC62828))
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    Text("Apply for a Wholesale / Distributor account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Get MOQ-tiered pricing and access to the Quick-Order Pad and Request-a-Quote.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = kycRole == "wholesale",
+                            onClick = { viewModel.kycRole.value = "wholesale" },
+                            label = { Text("Wholesale") }
+                        )
+                        FilterChip(
+                            selected = kycRole == "distributor",
+                            onClick = { viewModel.kycRole.value = "distributor" },
+                            label = { Text("Distributor") }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ProfileTextField(
+                        value = kycBusinessName,
+                        onValueChange = { viewModel.kycBusinessName.value = it },
+                        label = "Business Name",
+                        icon = Icons.Outlined.Storefront
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ProfileTextField(
+                        value = kycGstin,
+                        onValueChange = { viewModel.kycGstin.value = it.uppercase() },
+                        label = "GSTIN",
+                        icon = Icons.Outlined.Badge
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { viewModel.submitKycApplication() },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        enabled = !isLoading
+                    ) {
+                        if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                        else Text(if (kycStatus == "rejected") "Re-apply" else "Submit Application")
                     }
                 }
             }

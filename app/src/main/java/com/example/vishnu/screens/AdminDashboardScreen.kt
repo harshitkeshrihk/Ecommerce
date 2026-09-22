@@ -14,7 +14,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.PendingActions
+import androidx.compose.material.icons.outlined.RequestQuote
 import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +38,8 @@ import com.example.vishnu.viewModels.AdminViewModel
 fun AdminDashboardScreen(
     onAddProductClick: (String) -> Unit,
     onGoToStoreClick: () -> Unit,
+    onKycQueueClick: () -> Unit,
+    onQuotePipelineClick: () -> Unit,
     viewModel: AdminViewModel = hiltViewModel()
 ) {
     val orders by viewModel.allOrders.collectAsState()
@@ -77,6 +81,12 @@ fun AdminDashboardScreen(
                     containerColor = Color.White
                 ),
                 actions = {
+                    IconButton(onClick = onKycQueueClick) {
+                        Icon(Icons.Outlined.VerifiedUser, contentDescription = "KYC Queue")
+                    }
+                    IconButton(onClick = onQuotePipelineClick) {
+                        Icon(Icons.Outlined.RequestQuote, contentDescription = "Quote Pipeline")
+                    }
                     OutlinedButton(
                         onClick = onGoToStoreClick,
                         modifier = Modifier.padding(end = 8.dp),

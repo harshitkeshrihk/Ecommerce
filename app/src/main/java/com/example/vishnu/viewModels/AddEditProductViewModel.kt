@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vishnu.model.MoqSlab
 import com.example.vishnu.model.Product
+import com.example.vishnu.repository.PricingRepository
 import com.example.vishnu.repository.ProductRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,6 +20,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AddEditProductViewModel @Inject constructor(
     private val repository: ProductRepository,
+    private val pricingRepository: PricingRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -26,12 +29,18 @@ class AddEditProductViewModel @Inject constructor(
     var material = MutableStateFlow("")
     var weight = MutableStateFlow("")
     var price = MutableStateFlow("") // String for easy text field handling
+    var wholesalePrice = MutableStateFlow("") // Phase 1 — base price MOQ slabs override
+    var unitOfMeasure = MutableStateFlow("piece") // piece | dozen | kg | set
     var stock = MutableStateFlow("")
     var category = MutableStateFlow("General")
     var imageUrl = MutableStateFlow("")
     var isAvailable = MutableStateFlow(true)
 
     var selectedImageUri = MutableStateFlow<Uri?>(null)
+
+    // Phase 1 — MOQ slabs (only editable once the product has an id, i.e. Edit mode)
+    private val _moqSlabs = MutableStateFlow<List<MoqSlab>>(emptyList())
+    val moqSlabs = _moqSlabs.asStateFlow()
 
     // Internal State
     private var currentProductId: String? = null // Null = New Product
@@ -44,6 +53,24 @@ class AddEditProductViewModel @Inject constructor(
 
     fun setStoreId(id: String) {
         this.currentStoreId = id
+    }
+
+    fun addMoqSlab(minQty: Int, pricePerUnit: Double) {
+        val productId = currentProductId ?: return
+        viewModelScope.launch {
+            if (pricingRepository.addSlab(productId, minQty, pricePerUnit)) {
+                _moqSlabs.value = pricingRepository.getSlabsForProduct(productId)
+            }
+        }
+    }
+
+    fun deleteMoqSlab(slabId: String) {
+        val productId = currentProductId ?: return
+        viewModelScope.launch {
+            if (pricingRepository.deleteSlab(slabId)) {
+                _moqSlabs.value = pricingRepository.getSlabsForProduct(productId)
+            }
+        }
     }
 
     // Load data if editing an existing product
@@ -62,11 +89,14 @@ class AddEditProductViewModel @Inject constructor(
                 material.value = it.material ?: ""
                 weight.value = it.weight ?: ""
                 price.value = it.priceRetail?.toString() ?: ""
+                wholesalePrice.value = it.priceWholesale.toString()
+                unitOfMeasure.value = it.unitOfMeasure
                 stock.value = it.stockCount?.toString() ?: "0"
                 category.value = it.category ?: "General"
                 imageUrl.value = it.imageUrl ?: ""
                 isAvailable.value = it.isAvailable ?: true
             }
+            _moqSlabs.value = pricingRepository.getSlabsForProduct(productId)
             _isLoading.value = false
         }
     }
@@ -133,7 +163,8 @@ class AddEditProductViewModel @Inject constructor(
                 isAvailable = isAvailable.value,
                 gauge = "22",
                 subcategory = "subcategory",
-                priceWholesale = 0.0,
+                priceWholesale = wholesalePrice.value.toDoubleOrNull() ?: 0.0,
+                unitOfMeasure = unitOfMeasure.value,
                 videoUrl = null,
                 isBestseller = false,
                 createdAt = Instant.now().toString(),

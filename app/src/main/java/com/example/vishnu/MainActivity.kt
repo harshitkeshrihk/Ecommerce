@@ -31,10 +31,15 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.vishnu.screens.AddEditProductScreen
 import com.example.vishnu.screens.AdminDashboardScreen
+import com.example.vishnu.screens.AdminQuotePipelineScreen
 import com.example.vishnu.screens.AuthScreen
 import com.example.vishnu.screens.CartScreen
 import com.example.vishnu.screens.CatalogScreen
+import com.example.vishnu.screens.KycQueueScreen
 import com.example.vishnu.screens.ProductDetailScreen
+import com.example.vishnu.screens.QuickOrderPadScreen
+import com.example.vishnu.screens.RfqScreen
+import com.example.vishnu.screens.WholesaleHomeScreen
 import com.example.vishnu.model.UserRole
 import com.example.vishnu.screens.ProfileScreen
 import com.example.vishnu.ui.theme.VishnuTheme
@@ -127,6 +132,11 @@ fun VishnuCrockeryApp(
                             }
                             is AuthViewModel.AuthDestination.Catalog -> {
                                 navController.navigate("catalog") {
+                                    popUpTo("auth_screen") { inclusive = true }
+                                }
+                            }
+                            is AuthViewModel.AuthDestination.WholesaleHome -> {
+                                navController.navigate("wholesale_home") {
                                     popUpTo("auth_screen") { inclusive = true }
                                 }
                             }
@@ -229,9 +239,53 @@ fun VishnuCrockeryApp(
                         },
                         onGoToStoreClick = {
                             navController.navigate("catalog")
+                        },
+                        onKycQueueClick = {
+                            navController.navigate("kyc_queue")
+                        },
+                        onQuotePipelineClick = {
+                            navController.navigate("admin_quote_pipeline")
                         }
                     )
                 }
+            }
+
+            composable("kyc_queue") {
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") { popUpTo("kyc_queue") { inclusive = true } }
+                    }
+                } else {
+                    KycQueueScreen(onBack = { navController.popBackStack() })
+                }
+            }
+
+            composable("admin_quote_pipeline") {
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") { popUpTo("admin_quote_pipeline") { inclusive = true } }
+                    }
+                } else {
+                    AdminQuotePipelineScreen(onBack = { navController.popBackStack() })
+                }
+            }
+
+            // --- Wholesale / Distributor ---
+
+            composable("wholesale_home") {
+                WholesaleHomeScreen(
+                    onQuickOrderClick = { navController.navigate("quick_order_pad") },
+                    onRequestQuoteClick = { navController.navigate("rfq_screen") },
+                    onProfileClick = { navController.navigate("profile") }
+                )
+            }
+
+            composable("quick_order_pad") {
+                QuickOrderPadScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable("rfq_screen") {
+                RfqScreen(onBack = { navController.popBackStack() })
             }
 
             composable(

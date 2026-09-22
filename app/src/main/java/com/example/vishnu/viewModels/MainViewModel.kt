@@ -31,7 +31,11 @@ class MainViewModel @Inject constructor(
             dataStoreManager.isLoggedIn.collect { isLoggedIn ->
                 if (isLoggedIn) {
                     dataStoreManager.role.collect { role ->
-                        _startDestination.value = if (role == UserRole.ADMIN) "admin_dashboard" else "catalog"
+                        _startDestination.value = when (role) {
+                            UserRole.ADMIN -> "admin_dashboard"
+                            UserRole.WHOLESALE, UserRole.DISTRIBUTOR -> "wholesale_home"
+                            else -> "catalog"
+                        }
                     }
                 } else {
                     _startDestination.value = "auth_screen" // Your Login route

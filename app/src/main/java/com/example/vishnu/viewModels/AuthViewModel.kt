@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vishnu.model.UserRole
 import com.example.vishnu.model.roleEnum
-import com.example.vishnu.repository.AdminRepository
 import com.example.vishnu.repository.AuthRepository
 import com.example.vishnu.repository.ProfileRepository
 import com.example.vishnu.utils.DataStoreManager
@@ -20,7 +19,6 @@ import javax.inject.Inject
 class AuthViewModel @Inject constructor(
     private val repository: AuthRepository,
     private val dataStoreManager: DataStoreManager,
-    private val adminRepository: AdminRepository,
     private val profileRepository: ProfileRepository
 ) : ViewModel() {
 
@@ -36,6 +34,7 @@ class AuthViewModel @Inject constructor(
     sealed class AuthDestination {
         object AdminDashboard : AuthDestination()
         object Catalog : AuthDestination()
+        object WholesaleHome : AuthDestination()
     }
 
     private val _navigationEvent = MutableSharedFlow<AuthDestination>()
@@ -62,17 +61,19 @@ class AuthViewModel @Inject constructor(
             try {
                 repository.signIn(email.value, password.value)
 
-                // Owning a store still grants admin access (existing behavior).
-                // Everyone else's access level comes from their profile's role.
-                val myStore = adminRepository.getMyStore()
-                val role = if (myStore != null) UserRole.ADMIN else profileRepository.getUserProfile().roleEnum()
+                // Phase 1 store_id cleanup: admin access now comes from
+                // profiles.role only. Owning a `stores` row no longer grants
+                // ADMIN — that row is still looked up elsewhere (AdminRepository/
+                // AdminViewModel) purely to attach store_id to new products/
+                // orders for the delivery-partner app, not for authorization.
+                val role = profileRepository.getUserProfile().roleEnum()
 
                 dataStoreManager.saveUserSession(true, role)
 
-                if (role == UserRole.ADMIN) {
-                    _navigationEvent.emit(AuthDestination.AdminDashboard)
-                } else {
-                    _navigationEvent.emit(AuthDestination.Catalog)
+                when (role) {
+                    UserRole.ADMIN -> _navigationEvent.emit(AuthDestination.AdminDashboard)
+                    UserRole.WHOLESALE, UserRole.DISTRIBUTOR -> _navigationEvent.emit(AuthDestination.WholesaleHome)
+                    else -> _navigationEvent.emit(AuthDestination.Catalog)
                 }
 
                 _authState.value = AuthState.Success("Welcome back!")

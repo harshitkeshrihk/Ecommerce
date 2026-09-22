@@ -1,6 +1,7 @@
 package com.example.vishnu.repository
 
 import android.util.Log
+import com.example.vishnu.model.KycSubmissionRequest
 import com.example.vishnu.model.Order
 import com.example.vishnu.model.OrderItemDetail
 import com.example.vishnu.model.ProfileUpdateRequest
@@ -55,6 +56,31 @@ class ProfileRepository @Inject constructor(
             false
         }
     }
+
+    // Phase 1: apply for a wholesale/distributor account. Puts the account
+    // into the admin KYC queue (kyc_status = 'pending'); `role` itself is
+    // untouched here — it only changes once an admin approves the request
+    // (AdminRepository.approveKyc), per the DB trigger in 003_phase1_wholesale_core.sql §C.
+    suspend fun submitKycApplication(requestedRole: String, gstin: String, businessName: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val userId = auth.currentUserOrNull()?.id ?: return@withContext false
+            try {
+                postgrest["profiles"].update(
+                    KycSubmissionRequest(
+                        requestedRole = requestedRole,
+                        gstin = gstin,
+                        businessName = businessName,
+                        kycStatus = "pending"
+                    )
+                ) {
+                    filter { eq("id", userId) }
+                }
+                true
+            } catch (e: Exception) {
+                Log.e("ProfileRepo", "Error submitting KYC application", e)
+                false
+            }
+        }
 
     // 1. Fetch Active Orders (Processing, Shipped, etc.)
     suspend fun getActiveOrders(): List<Order> = withContext(Dispatchers.IO) {

@@ -23,6 +23,23 @@ class ProfileViewModel @Inject constructor(
     var phone = MutableStateFlow("")
     var address = MutableStateFlow("")
 
+    // Business KYC form state (Phase 1 wholesale/distributor application)
+    var kycRole = MutableStateFlow("wholesale") // "wholesale" | "distributor"
+    var kycGstin = MutableStateFlow("")
+    var kycBusinessName = MutableStateFlow("")
+
+    private val _currentRole = MutableStateFlow("retail")
+    val currentRole = _currentRole.asStateFlow()
+
+    private val _kycStatus = MutableStateFlow<String?>(null) // null | pending | verified | rejected
+    val kycStatus = _kycStatus.asStateFlow()
+
+    private val _kycRejectionReason = MutableStateFlow<String?>(null)
+    val kycRejectionReason = _kycRejectionReason.asStateFlow()
+
+    private val _kycSubmitStatus = MutableStateFlow<String?>(null)
+    val kycSubmitStatus = _kycSubmitStatus.asStateFlow()
+
     // UI States
     private val _isLoading = MutableStateFlow(true)
     val isLoading = _isLoading.asStateFlow()
@@ -48,9 +65,34 @@ class ProfileViewModel @Inject constructor(
                 name.value = profile.fullName ?: ""
                 phone.value = profile.phoneNumber ?: ""
                 address.value = profile.address ?: ""
+                _currentRole.value = profile.role ?: "retail"
+                _kycStatus.value = profile.kycStatus
+                _kycRejectionReason.value = profile.kycRejectionReason
             }
             _isLoading.value = false
         }
+    }
+
+    fun submitKycApplication() {
+        viewModelScope.launch {
+            if (kycGstin.value.isBlank() || kycBusinessName.value.isBlank()) {
+                _kycSubmitStatus.value = "GSTIN and business name are required."
+                return@launch
+            }
+            _isLoading.value = true
+            val success = repository.submitKycApplication(kycRole.value, kycGstin.value, kycBusinessName.value)
+            _kycSubmitStatus.value = if (success) {
+                _kycStatus.value = "pending"
+                "Application submitted. We'll review it shortly."
+            } else {
+                "Failed to submit application. Please try again."
+            }
+            _isLoading.value = false
+        }
+    }
+
+    fun clearKycSubmitStatus() {
+        _kycSubmitStatus.value = null
     }
 
     fun saveProfile() {

@@ -10,7 +10,8 @@ data class OrderRequest(
     @SerialName("total_amount") val totalAmount: Double,
     @SerialName("shipping_address") val address: String,
     @SerialName("store_id") val storeId: String,
-    val status: String = "PAID"
+    val status: String = "PAID",
+    val channel: String = "retail" // retail | wholesale — set by CartRepository.createOrder
 )
 
 // 2. Get this back to know the new Order ID (e.g., 105)
@@ -44,5 +45,6 @@ data class Order( // <--- This is the class for Active/Past lists
     @SerialName("total_amount") val totalAmount: Double,
     val status: String,
     @SerialName("payment_id") val paymentId: String,
-    @SerialName("shipping_address") val shippingAddress: String
+    @SerialName("shipping_address") val shippingAddress: String,
+    val channel: String = "retail"
 )

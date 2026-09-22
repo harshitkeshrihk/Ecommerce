@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,10 +25,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.example.vishnu.model.MoqSlab
 import com.example.vishnu.viewModels.AddEditProductViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +51,9 @@ fun AddEditProductScreen(
     val weight by viewModel.weight.collectAsState()
     val imageUrl by viewModel.imageUrl.collectAsState()
     val isAvailable by viewModel.isAvailable.collectAsState()
+    val wholesalePrice by viewModel.wholesalePrice.collectAsState()
+    val unitOfMeasure by viewModel.unitOfMeasure.collectAsState()
+    val moqSlabs by viewModel.moqSlabs.collectAsState()
 
 
     val isLoading by viewModel.isLoading.collectAsState()
@@ -192,6 +198,45 @@ fun AddEditProductScreen(
                     )
                 }
 
+                // --- Phase 1: Wholesale pricing ---
+                Text("Wholesale (bulk) pricing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = wholesalePrice,
+                        onValueChange = { viewModel.wholesalePrice.value = it },
+                        label = { Text("Base Wholesale Price (₹)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Text(
+                    "Used when a wholesale/distributor order doesn't clear any MOQ slab below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Unit of Measure", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("piece", "dozen", "kg", "set").forEach { unit ->
+                        FilterChip(
+                            selected = unitOfMeasure == unit,
+                            onClick = { viewModel.unitOfMeasure.value = unit },
+                            label = { Text(unit) }
+                        )
+                    }
+                }
+
+                if (productId != null) {
+                    MoqSlabsEditor(
+                        slabs = moqSlabs,
+                        onAdd = { minQty, pricePerUnit -> viewModel.addMoqSlab(minQty, pricePerUnit) },
+                        onDelete = { slabId -> viewModel.deleteMoqSlab(slabId) }
+                    )
+                } else {
+                    Text("Save the product first to add MOQ slabs.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                }
+
                 // --- Availability Switch ---
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -214,6 +259,72 @@ fun AddEditProductScreen(
                 ) {
                     Text("Save Product")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun MoqSlabsEditor(
+    slabs: List<MoqSlab>,
+    onAdd: (minQty: Int, pricePerUnit: Double) -> Unit,
+    onDelete: (slabId: String) -> Unit
+) {
+    var minQty by remember { mutableStateOf("") }
+    var pricePerUnit by remember { mutableStateOf("") }
+
+    Column {
+        Text("MOQ slabs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "e.g. 10+ units at ₹90, 50+ units at ₹80. The highest breakpoint an order clears wins.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        slabs.sortedBy { it.minQty }.forEach { slab ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("${slab.minQty}+ units → ₹${slab.pricePerUnit}/unit", modifier = Modifier.weight(1f))
+                IconButton(onClick = { onDelete(slab.id) }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete slab", tint = Color(0xFFC62828))
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = minQty,
+                onValueChange = { minQty = it },
+                label = { Text("Min qty") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedTextField(
+                value = pricePerUnit,
+                onValueChange = { pricePerUnit = it },
+                label = { Text("Price/unit") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = {
+                    val qty = minQty.toIntOrNull()
+                    val price = pricePerUnit.toDoubleOrNull()
+                    if (qty != null && qty > 0 && price != null) {
+                        onAdd(qty, price)
+                        minQty = ""
+                        pricePerUnit = ""
+                    }
+                }
+            ) {
+                Icon(Icons.Default.Check, contentDescription = "Add slab")
             }
         }
     }

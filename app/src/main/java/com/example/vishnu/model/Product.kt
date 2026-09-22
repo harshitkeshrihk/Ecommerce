@@ -41,7 +41,10 @@ data class Product(
     @SerialName("store_id")
     val storeId: String,
 
-    val attributes: Map<String, String>? = null
+    val attributes: Map<String, String>? = null,
+
+    @SerialName("unit_of_measure")
+    val unitOfMeasure: String = "piece" // piece | dozen | kg | set — used by the Quick-Order Pad
 
 )
 
