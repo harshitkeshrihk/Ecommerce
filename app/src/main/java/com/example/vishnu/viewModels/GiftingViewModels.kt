@@ -3,6 +3,13 @@ package com.example.vishnu.viewModels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vishnu.model.BudgetTier
+import com.example.vishnu.model.CapacityCalendar
+import com.example.vishnu.model.CapacityCheck
+import com.example.vishnu.model.CapacityOverride
+import com.example.vishnu.model.CapacitySettings
+import com.example.vishnu.model.OPEN_PRODUCTION_STATUSES
+import com.example.vishnu.model.ProductionJob
+import com.example.vishnu.model.ProductionScheduler
 import com.example.vishnu.model.GiftPack
 import com.example.vishnu.model.GiftPackDraft
 import com.example.vishnu.model.GiftPackLine
@@ -13,6 +20,7 @@ import com.example.vishnu.model.Product
 import com.example.vishnu.repository.GiftPackRepository
 import com.example.vishnu.repository.GiftingOrderRepository
 import com.example.vishnu.repository.GiftingOrderResult
+import com.example.vishnu.repository.ProductionRepository
 import com.example.vishnu.repository.ProfileRepository
 import com.example.vishnu.utils.PaymentPurpose
 import com.example.vishnu.utils.PaymentResult
@@ -25,9 +33,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -82,10 +93,37 @@ class GiftingHomeViewModel @Inject constructor(
 // Customer: Bulk Pack Builder + checkout
 // ---------------------------------------------------------------------
 
+/** What the builder shows under the ship-by date. */
+sealed class ShipByCapacity {
+    object NotChecked : ShipByCapacity()       // no date / pack count yet
+    object Unknown : ShipByCapacity()          // capacity data failed to load
+    object Available : ShipByCapacity()
+    data class Conflict(val earliestAvailable: LocalDate?) : ShipByCapacity()
+}
+
+/** Workshop capacity + everything already booked, fetched together. */
+private data class CapacitySnapshot(val calendar: CapacityCalendar, val existingJobs: List<ProductionJob>)
+
+private fun capacityFor(snapshot: CapacitySnapshot?, shipBy: LocalDate?, packCount: Int?): ShipByCapacity {
+    if (shipBy == null || packCount == null || packCount <= 0) return ShipByCapacity.NotChecked
+    if (snapshot == null) return ShipByCapacity.Unknown
+    val result = ProductionScheduler.check(
+        existing = snapshot.existingJobs,
+        newJob = ProductionJob("new-order", shipBy, packCount),
+        calendar = snapshot.calendar,
+        today = LocalDate.now()
+    )
+    return when (result) {
+        CapacityCheck.Available -> ShipByCapacity.Available
+        is CapacityCheck.Conflict -> ShipByCapacity.Conflict(result.earliestAvailable)
+    }
+}
+
 @HiltViewModel
 class GiftPackBuilderViewModel @Inject constructor(
     private val giftPackRepository: GiftPackRepository,
     private val giftingOrderRepository: GiftingOrderRepository,
+    private val productionRepository: ProductionRepository,
     private val profileRepository: ProfileRepository,
     private val auth: Auth,
     private val paymentRouter: PaymentRouter
@@ -115,6 +153,15 @@ class GiftPackBuilderViewModel @Inject constructor(
     val total: StateFlow<Double> = combine(_draft, packCountText) { draft, countText ->
         draft.totalFor(countText.toIntOrNull() ?: 0)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    private val capacitySnapshot = MutableStateFlow<CapacitySnapshot?>(null)
+
+    /** Live checkProductionCapacity result for the chosen ship-by date and pack count. */
+    val shipByCapacity: StateFlow<ShipByCapacity> =
+        combine(capacitySnapshot, shipByDate, packCountText) { snapshot, shipBy, countText ->
+            capacityFor(snapshot, shipBy, countText.toIntOrNull())
+        }.flowOn(Dispatchers.Default) // up to a year of re-planning when searching for the earliest date
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ShipByCapacity.NotChecked)
 
     sealed class BuilderEvent {
         data class LaunchPayment(val amount: Double, val email: String, val phone: String) : BuilderEvent()
@@ -154,8 +201,15 @@ class GiftPackBuilderViewModel @Inject constructor(
             }
             _giftingProducts.value = giftPackRepository.getGiftingProducts()
             address.value = profileRepository.getUserProfile()?.address.orEmpty()
+            capacitySnapshot.value = loadCapacitySnapshot()
             _isLoading.value = false
         }
+    }
+
+    private suspend fun loadCapacitySnapshot(): CapacitySnapshot? {
+        val calendar = productionRepository.getCalendar(LocalDate.now()) ?: return null
+        val load = productionRepository.getOpenLoad() ?: return null
+        return CapacitySnapshot(calendar, ProductionScheduler.jobsFromLoad(load))
     }
 
     fun addProduct(product: Product) {
@@ -188,6 +242,27 @@ class GiftPackBuilderViewModel @Inject constructor(
                 return@launch
             }
             _isProcessing.value = true
+
+            // Re-check against fresh data: other customers may have booked the
+            // workshop since this screen loaded. Fail closed if we can't tell.
+            val fresh = loadCapacitySnapshot()
+            capacitySnapshot.value = fresh
+            val shipBy = shipByDate.value
+            val capacity = withContext(Dispatchers.Default) { capacityFor(fresh, shipBy, packCount) }
+            when (capacity) {
+                ShipByCapacity.Available -> Unit
+                is ShipByCapacity.Conflict -> {
+                    _events.emit(BuilderEvent.Message(capacityConflictMessage(capacity)))
+                    _isProcessing.value = false
+                    return@launch
+                }
+                else -> {
+                    _events.emit(BuilderEvent.Message("Couldn't check workshop capacity. Please try again."))
+                    _isProcessing.value = false
+                    return@launch
+                }
+            }
+
             pendingCheckout = PendingCheckout(
                 draft = draft.copy(name = draft.name.trim().ifBlank { "Custom Gift Pack" }),
                 packCount = packCount!!,
@@ -350,6 +425,153 @@ class AdminGiftingOrdersViewModel @Inject constructor(
         viewModelScope.launch {
             _orders.value = giftPackRepository.getGiftingOrders()
             _isLoading.value = false
+        }
+    }
+}
+
+private val shortDate = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy")
+
+fun capacityConflictMessage(conflict: ShipByCapacity.Conflict): String =
+    conflict.earliestAvailable?.let {
+        "The workshop is fully booked before this date. Earliest available ship-by date: ${it.format(shortDate)}"
+    } ?: "The workshop has no free capacity for this many packs. Please contact us."
+
+// ---------------------------------------------------------------------
+// Admin: production calendar + capacity settings
+// ---------------------------------------------------------------------
+
+data class CalendarDay(
+    val date: LocalDate,
+    val capacity: Int,
+    val planned: Int,
+    val isOverridden: Boolean,
+    /** (order, packs worked on it that day) */
+    val work: List<Pair<GiftingOrder, Int>>,
+    /** Orders whose ship-by date is this day */
+    val due: List<GiftingOrder>
+)
+
+data class AtRiskOrder(val order: GiftingOrder, val projectedFinish: LocalDate?)
+
+@HiltViewModel
+class AdminProductionCalendarViewModel @Inject constructor(
+    private val giftPackRepository: GiftPackRepository,
+    private val productionRepository: ProductionRepository
+) : ViewModel() {
+
+    private val _days = MutableStateFlow<List<CalendarDay>>(emptyList())
+    val days = _days.asStateFlow()
+
+    private val _atRisk = MutableStateFlow<List<AtRiskOrder>>(emptyList())
+    val atRisk = _atRisk.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading = _isLoading.asStateFlow()
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val today = LocalDate.now()
+            val calendar = productionRepository.getCalendar(today)
+            if (calendar == null) {
+                _error.value = "Couldn't load capacity settings. Has 005_phase2_production_capacity.sql been run?"
+                _isLoading.value = false
+                return@launch
+            }
+            _error.value = null
+
+            val orders = giftPackRepository.getGiftingOrders()
+                .filter { it.order.status in OPEN_PRODUCTION_STATUSES }
+            val byId = orders.associateBy { it.orderId.toString() }
+            val plan = ProductionScheduler.plan(ProductionScheduler.jobsFrom(orders), calendar, today)
+
+            _atRisk.value = plan.late.mapNotNull { id ->
+                byId[id]?.let { AtRiskOrder(it, plan.finishDay[id]) }
+            }
+            _days.value = (0 until CALENDAR_DAYS).map { offset ->
+                val date = today.plusDays(offset.toLong())
+                CalendarDay(
+                    date = date,
+                    capacity = calendar.capacityOn(date),
+                    planned = plan.plannedOn(date),
+                    isOverridden = calendar.isOverridden(date),
+                    work = plan.allocations[date].orEmpty().mapNotNull { (id, packs) -> byId[id]?.let { it to packs } },
+                    due = orders.filter { it.shipByDate == date.toString() }
+                )
+            }
+            _isLoading.value = false
+        }
+    }
+
+    companion object {
+        const val CALENDAR_DAYS = 60
+    }
+}
+
+@HiltViewModel
+class AdminCapacitySettingsViewModel @Inject constructor(
+    private val productionRepository: ProductionRepository
+) : ViewModel() {
+
+    val defaultPacksText = MutableStateFlow("")
+    val closedWeekdays = MutableStateFlow<Set<Int>>(emptySet())
+
+    private val _overrides = MutableStateFlow<List<CapacityOverride>>(emptyList())
+    val overrides = _overrides.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading = _isLoading.asStateFlow()
+
+    private val _messages = MutableSharedFlow<String>()
+    val messages = _messages.asSharedFlow()
+
+    init {
+        viewModelScope.launch {
+            productionRepository.getSettings()?.let {
+                defaultPacksText.value = it.defaultPacksPerDay.toString()
+                closedWeekdays.value = it.closedWeekdays.toSet()
+            }
+            _overrides.value = productionRepository.getOverrides(LocalDate.now())
+            _isLoading.value = false
+        }
+    }
+
+    fun toggleWeekday(isoDay: Int) {
+        closedWeekdays.value = closedWeekdays.value.let { if (isoDay in it) it - isoDay else it + isoDay }
+    }
+
+    fun saveSettings() {
+        val packs = defaultPacksText.value.toIntOrNull()
+        viewModelScope.launch {
+            if (packs == null || packs < 0) {
+                _messages.emit("Enter a valid number of packs per day")
+                return@launch
+            }
+            val ok = productionRepository.saveSettings(CapacitySettings(packs, closedWeekdays.value.sorted()))
+            _messages.emit(if (ok) "Capacity saved" else "Could not save capacity")
+        }
+    }
+
+    fun addOverride(date: LocalDate, packs: Int, note: String) {
+        viewModelScope.launch {
+            val ok = productionRepository.upsertOverride(
+                CapacityOverride(date.toString(), packs.coerceAtLeast(0), note.trim().ifBlank { null })
+            )
+            if (ok) _overrides.value = productionRepository.getOverrides(LocalDate.now())
+            else _messages.emit("Could not save the date override")
+        }
+    }
+
+    fun deleteOverride(day: String) {
+        viewModelScope.launch {
+            if (productionRepository.deleteOverride(day)) {
+                _overrides.value = _overrides.value.filterNot { it.day == day }
+            } else {
+                _messages.emit("Could not delete the date override")
+            }
         }
     }
 }

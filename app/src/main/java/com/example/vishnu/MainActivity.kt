@@ -30,7 +30,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.vishnu.screens.AddEditProductScreen
+import com.example.vishnu.screens.AdminCapacitySettingsScreen
 import com.example.vishnu.screens.AdminDashboardScreen
+import com.example.vishnu.screens.AdminProductionCalendarScreen
 import com.example.vishnu.screens.AdminGiftPackEditScreen
 import com.example.vishnu.screens.AdminGiftPacksScreen
 import com.example.vishnu.screens.AdminGiftingOrdersScreen
@@ -339,7 +341,8 @@ fun VishnuCrockeryApp(
                                 if (packId == null) "admin_gift_pack_edit" else "admin_gift_pack_edit?packId=$packId"
                             )
                         },
-                        onGiftingOrdersClick = { navController.navigate("admin_gifting_orders") }
+                        onGiftingOrdersClick = { navController.navigate("admin_gifting_orders") },
+                        onProductionCalendarClick = { navController.navigate("admin_production_calendar") }
                     )
                 }
             }
@@ -369,6 +372,29 @@ fun VishnuCrockeryApp(
                     }
                 } else {
                     AdminGiftingOrdersScreen(onBack = { navController.popBackStack() })
+                }
+            }
+
+            composable("admin_production_calendar") {
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") { popUpTo("admin_production_calendar") { inclusive = true } }
+                    }
+                } else {
+                    AdminProductionCalendarScreen(
+                        onBack = { navController.popBackStack() },
+                        onCapacitySettingsClick = { navController.navigate("admin_capacity_settings") }
+                    )
+                }
+            }
+
+            composable("admin_capacity_settings") {
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") { popUpTo("admin_capacity_settings") { inclusive = true } }
+                    }
+                } else {
+                    AdminCapacitySettingsScreen(onBack = { navController.popBackStack() })
                 }
             }
 

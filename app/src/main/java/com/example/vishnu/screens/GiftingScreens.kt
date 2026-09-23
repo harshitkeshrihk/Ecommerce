@@ -32,6 +32,8 @@ import com.example.vishnu.uicomponents.PackContentsEditor
 import com.example.vishnu.utils.formatRupees
 import com.example.vishnu.viewModels.GiftPackBuilderViewModel
 import com.example.vishnu.viewModels.GiftingHomeViewModel
+import com.example.vishnu.viewModels.ShipByCapacity
+import com.example.vishnu.viewModels.capacityConflictMessage
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -189,6 +191,7 @@ fun GiftPackBuilderScreen(
     val shipByDate by viewModel.shipByDate.collectAsState()
     val address by viewModel.address.collectAsState()
     val total by viewModel.total.collectAsState()
+    val shipByCapacity by viewModel.shipByCapacity.collectAsState()
     val giftingProducts by viewModel.giftingProducts.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
@@ -301,6 +304,7 @@ fun GiftPackBuilderScreen(
                 Spacer(Modifier.width(8.dp))
                 Text(shipByDate?.format(displayDate) ?: "Choose the date you need it shipped by")
             }
+            ShipByCapacityNote(shipByCapacity, onUseDate = { viewModel.shipByDate.value = it })
 
             SectionTitle("5. Delivery address")
             OutlinedTextField(
@@ -339,6 +343,37 @@ fun GiftPackBuilderScreen(
             title = { Text("Order placed") },
             text = { Text("Your gifting order #$orderId is confirmed. You can track it under My Orders.") }
         )
+    }
+}
+
+@Composable
+private fun ShipByCapacityNote(capacity: ShipByCapacity, onUseDate: (LocalDate) -> Unit) {
+    when (capacity) {
+        ShipByCapacity.NotChecked -> Unit
+        ShipByCapacity.Available -> Text(
+            "✓ The workshop has capacity to finish your packs before this date",
+            color = Color(0xFF2E7D32),
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+        ShipByCapacity.Unknown -> Text(
+            "Couldn't check workshop capacity right now — we'll check again when you pay.",
+            color = Color.Gray,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+        is ShipByCapacity.Conflict -> Column(Modifier.padding(top = 6.dp)) {
+            Text(
+                "✗ " + capacityConflictMessage(capacity),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+            capacity.earliestAvailable?.let { earliest ->
+                TextButton(onClick = { onUseDate(earliest) }) {
+                    Text("Use ${earliest.format(displayDate)}")
+                }
+            }
+        }
     }
 }
 
