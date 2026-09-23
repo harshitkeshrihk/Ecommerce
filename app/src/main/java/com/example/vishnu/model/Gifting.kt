@@ -94,6 +94,9 @@ object GiftingRules {
     /** Engraving/printing length limit for personalization text. */
     const val MAX_PERSONALIZATION_LENGTH = 40
 
+    /** Largest logo / proof image accepted (matches the brand-assets bucket limit). */
+    const val MAX_BRAND_IMAGE_BYTES = 5 * 1024 * 1024
+
     /** Smallest share of the order total the customer can pay at checkout. */
     const val MIN_ADVANCE_PERCENT = 40
 
@@ -170,7 +173,9 @@ data class GiftingOrderRequest(
     @SerialName("pack_contents") val packContents: List<PackContentLine>,
     @SerialName("personalization_text") val personalizationText: String?,
     @SerialName("ship_by_date") val shipByDate: String, // ISO yyyy-MM-dd
-    @SerialName("balance_due_date") val balanceDueDate: String // ISO yyyy-MM-dd
+    @SerialName("balance_due_date") val balanceDueDate: String, // ISO yyyy-MM-dd
+    @SerialName("logo_path") val logoPath: String?, // corporate only
+    @SerialName("logo_notes") val logoNotes: String?
 )
 
 @Serializable
@@ -201,9 +206,66 @@ data class GiftingOrder(
     @SerialName("ship_by_date") val shipByDate: String,
     @SerialName("balance_due_date") val balanceDueDate: String? = null,
     val order: Order,
-    @SerialName("gifting_payments") val payments: List<GiftingPayment> = emptyList()
+    @SerialName("gifting_payments") val payments: List<GiftingPayment> = emptyList(),
+    @SerialName("logo_path") val logoPath: String? = null,
+    @SerialName("logo_notes") val logoNotes: String? = null,
+    @SerialName("brand_assets") val proofs: List<BrandAsset> = emptyList()
 ) {
+    val isCorporate: Boolean get() = occasionType == OccasionType.CORPORATE.dbValue
+
+    /** Newest proof version, if the team has uploaded any. */
+    val latestProof: BrandAsset? get() = proofs.maxByOrNull { it.version }
+
+    val proofStatus: ProofStatus
+        get() = when {
+            !isCorporate -> ProofStatus.NOT_REQUIRED
+            proofs.any { it.status == BrandAsset.APPROVED } -> ProofStatus.APPROVED
+            latestProof == null -> ProofStatus.AWAITING_PROOF
+            latestProof!!.status == BrandAsset.REVISION_REQUESTED -> ProofStatus.REVISION_REQUESTED
+            else -> ProofStatus.IN_REVIEW
+        }
+
+    /** Corporate orders can't enter production until a proof is approved (enforced in the DB too). */
+    val canEnterProduction: Boolean get() = proofStatus == ProofStatus.NOT_REQUIRED || proofStatus == ProofStatus.APPROVED
+
     val amountPaid: Double get() = payments.sumOf { it.amount }
     val balance: Double get() = (order.totalAmount - amountPaid).coerceAtLeast(0.0)
     val isFullyPaid: Boolean get() = GiftingRules.isFullyPaid(amountPaid, order.totalAmount)
 }
+
+// --- Corporate branding (brand_assets = proof versions) ---
+
+enum class ProofStatus {
+    NOT_REQUIRED,        // wedding / event
+    AWAITING_PROOF,      // logo uploaded, team hasn't sent a proof yet
+    IN_REVIEW,           // latest proof waiting for the customer
+    REVISION_REQUESTED,  // customer asked for changes, team to send a new version
+    APPROVED
+}
+
+@Serializable
+data class BrandAsset(
+    val id: String,
+    @SerialName("order_id") val orderId: Long,
+    val version: Int,
+    @SerialName("proof_path") val proofPath: String,
+    val status: String,
+    @SerialName("admin_note") val adminNote: String? = null,
+    @SerialName("customer_comment") val customerComment: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("decided_at") val decidedAt: String? = null
+) {
+    companion object {
+        const val IN_REVIEW = "in_review"
+        const val APPROVED = "approved"
+        const val REVISION_REQUESTED = "revision_requested"
+    }
+}
+
+@Serializable
+data class BrandAssetRequest(
+    @SerialName("order_id") val orderId: Long,
+    val version: Int,
+    @SerialName("proof_path") val proofPath: String,
+    @SerialName("admin_note") val adminNote: String?
+)

@@ -73,11 +73,14 @@ class AdminRepository @Inject constructor(
             null
         } catch (e: Exception) {
             Log.e("AdminRepo", "Error updating status", e)
-            // block_unpaid_gifting_dispatch (006) rejects dispatching a gifting order with a balance due.
-            if (e.message?.contains("unpaid balance") == true) {
-                "Order #$orderId still has an unpaid balance — it can't be dispatched yet"
-            } else {
-                "Failed to update status"
+            // Gifting guards in the DB: 006 blocks dispatch with a balance due,
+            // 008 blocks production of a corporate order before its logo proof is approved.
+            when {
+                e.message?.contains("unpaid balance") == true ->
+                    "Order #$orderId still has an unpaid balance — it can't be dispatched yet"
+                e.message?.contains("awaiting logo approval") == true ->
+                    "Order #$orderId is waiting for the customer to approve the logo proof"
+                else -> "Failed to update status"
             }
         }
     }

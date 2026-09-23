@@ -117,7 +117,7 @@ class GiftPackRepository @Inject constructor(
     suspend fun getGiftingOrders(): List<GiftingOrder> = withContext(Dispatchers.IO) {
         try {
             postgrest["gifting_orders"]
-                .select(columns = Columns.raw("*, order:orders(*), gifting_payments(*)")) {
+                .select(columns = Columns.raw("*, order:orders(*), gifting_payments(*), brand_assets(*)")) {
                     order("ship_by_date", order = SupabaseOrder.ASCENDING)
                 }
                 .decodeList<GiftingOrder>()
@@ -131,7 +131,7 @@ class GiftPackRepository @Inject constructor(
     suspend fun getMyGiftingOrders(userId: String): List<GiftingOrder> = withContext(Dispatchers.IO) {
         try {
             postgrest["gifting_orders"]
-                .select(columns = Columns.raw("*, order:orders!inner(*), gifting_payments(*)")) {
+                .select(columns = Columns.raw("*, order:orders!inner(*), gifting_payments(*), brand_assets(*)")) {
                     filter { eq("order.user_id", userId) }
                     order("ship_by_date", order = SupabaseOrder.DESCENDING)
                 }

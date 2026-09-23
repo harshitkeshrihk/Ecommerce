@@ -1,6 +1,9 @@
 package com.example.vishnu.screens
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,8 +26,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.vishnu.model.BrandAsset
 import com.example.vishnu.model.GiftPack
 import com.example.vishnu.model.GiftingOrder
+import com.example.vishnu.model.ProofStatus
+import com.example.vishnu.uicomponents.PrivateImage
+import com.example.vishnu.uicomponents.ProofHistory
+import com.example.vishnu.uicomponents.proofStatusColor
+import com.example.vishnu.uicomponents.proofStatusLabel
 import com.example.vishnu.uicomponents.GiftProductPickerDialog
 import com.example.vishnu.uicomponents.PackContentsEditor
 import com.example.vishnu.utils.formatRupees
@@ -247,8 +256,23 @@ fun AdminGiftingOrdersScreen(
     onBack: () -> Unit,
     viewModel: AdminGiftingOrdersViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val orders by viewModel.orders.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val uploadingOrderId by viewModel.uploadingOrderId.collectAsState()
+
+    // Proof upload: note dialog first, then the image picker.
+    var proofNoteFor by remember { mutableStateOf<GiftingOrder?>(null) }
+    var pendingProof by remember { mutableStateOf<Pair<GiftingOrder, String>?>(null) }
+    val proofPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val pending = pendingProof
+        pendingProof = null
+        if (uri != null && pending != null) viewModel.uploadProof(pending.first, uri, pending.second)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.messages.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
 
     Scaffold(
         topBar = {
@@ -272,14 +296,39 @@ fun AdminGiftingOrdersScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(orders, key = { it.orderId }) { GiftingOrderCard(it) }
+                items(orders, key = { it.orderId }) { order ->
+                    GiftingOrderCard(
+                        order = order,
+                        resolveUrl = viewModel::imageUrl,
+                        isUploading = uploadingOrderId == order.orderId,
+                        onUploadProof = { proofNoteFor = order }
+                    )
+                }
             }
         }
+    }
+
+    proofNoteFor?.let { order ->
+        ProofNoteDialog(
+            version = (order.latestProof?.version ?: 0) + 1,
+            lastComment = order.latestProof?.takeIf { it.status == BrandAsset.REVISION_REQUESTED }?.customerComment,
+            onContinue = { note ->
+                proofNoteFor = null
+                pendingProof = order to note
+                proofPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            onDismiss = { proofNoteFor = null }
+        )
     }
 }
 
 @Composable
-private fun GiftingOrderCard(order: GiftingOrder) {
+private fun GiftingOrderCard(
+    order: GiftingOrder,
+    resolveUrl: suspend (String) -> String?,
+    isUploading: Boolean,
+    onUploadProof: () -> Unit
+) {
     val shipBy = runCatching { LocalDate.parse(order.shipByDate) }.getOrNull()
     val daysLeft = shipBy?.let { ChronoUnit.DAYS.between(LocalDate.now(), it) }
 
@@ -305,6 +354,86 @@ private fun GiftingOrderCard(order: GiftingOrder) {
                 Text("Engrave: \"$it\"", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
             Text(order.order.shippingAddress, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+
+            if (order.isCorporate) {
+                HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                AdminBrandingSection(order, resolveUrl, isUploading, onUploadProof)
+            }
         }
     }
+}
+
+@Composable
+private fun AdminBrandingSection(
+    order: GiftingOrder,
+    resolveUrl: suspend (String) -> String?,
+    isUploading: Boolean,
+    onUploadProof: () -> Unit
+) {
+    Text("Logo & proof", fontWeight = FontWeight.Bold)
+    Row(verticalAlignment = Alignment.Top) {
+        order.logoPath?.let { PrivateImage(it, resolveUrl, Modifier.size(72.dp)) }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                proofStatusLabel(order),
+                color = proofStatusColor(order.proofStatus),
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            order.logoNotes?.let { Text("Placement: $it", style = MaterialTheme.typography.bodySmall) }
+            if (!order.canEnterProduction) {
+                Text(
+                    "Can't move to PROCESSING until the customer approves a proof.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+        }
+    }
+    ProofHistory(order, resolveUrl)
+
+    // A new version is needed when there's no proof yet or the customer asked for changes.
+    if (order.proofStatus == ProofStatus.AWAITING_PROOF || order.proofStatus == ProofStatus.REVISION_REQUESTED) {
+        Button(
+            onClick = onUploadProof,
+            enabled = !isUploading && order.order.userId != null,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        ) {
+            if (isUploading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            else Text("Upload proof v${(order.latestProof?.version ?: 0) + 1}")
+        }
+    }
+}
+
+@Composable
+private fun ProofNoteDialog(
+    version: Int,
+    lastComment: String?,
+    onContinue: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var note by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Proof v$version") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                lastComment?.let {
+                    Text("Customer asked: \"$it\"", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it.take(300) },
+                    label = { Text("Note to the customer (optional)") },
+                    placeholder = { Text("e.g. Logo laser-engraved, 4 cm wide, centred") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("Next you'll pick the proof image (photo of a sample or a mockup).", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onContinue(note) }) { Text("Choose image") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }

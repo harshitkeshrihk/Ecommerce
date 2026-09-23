@@ -1,6 +1,9 @@
 package com.example.vishnu.screens
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -19,7 +22,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -203,6 +209,11 @@ fun GiftPackBuilderScreen(
     val payChoice by viewModel.payChoice.collectAsState()
     val customPayText by viewModel.customPayText.collectAsState()
     val occasion by viewModel.occasion.collectAsState()
+    val logoUri by viewModel.logoUri.collectAsState()
+    val logoNotes by viewModel.logoNotes.collectAsState()
+    val logoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) viewModel.logoUri.value = uri
+    }
     val giftingProducts by viewModel.giftingProducts.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
@@ -284,6 +295,18 @@ fun GiftPackBuilderScreen(
                         label = { Text(option.label) }
                     )
                 }
+            }
+
+            if (occasion == OccasionType.CORPORATE) {
+                Spacer(Modifier.height(16.dp))
+                CorporateLogoSection(
+                    logoUri = logoUri,
+                    notes = logoNotes,
+                    onPick = {
+                        logoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                    onNotesChange = { viewModel.logoNotes.value = it.take(200) }
+                )
             }
 
             SectionTitle("1. What's in each pack")
@@ -390,6 +413,46 @@ fun GiftPackBuilderScreen(
                 )
             }
         )
+    }
+}
+
+@Composable
+private fun CorporateLogoSection(
+    logoUri: android.net.Uri?,
+    notes: String,
+    onPick: () -> Unit,
+    onNotesChange: (String) -> Unit
+) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Company logo", fontWeight = FontWeight.Bold)
+            Text(
+                "Our team will send you a proof showing exactly how your logo will look. " +
+                    "Production starts only after you approve it.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (logoUri != null) {
+                    AsyncImage(
+                        model = logoUri,
+                        contentDescription = "Selected logo",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp))
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
+                OutlinedButton(onClick = onPick) {
+                    Text(if (logoUri == null) "Upload logo (PNG / JPG)" else "Change logo")
+                }
+            }
+            OutlinedTextField(
+                value = notes,
+                onValueChange = onNotesChange,
+                label = { Text("Where should the logo go? (optional)") },
+                placeholder = { Text("e.g. Engraved on the bottle, gold foil on the box lid") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 

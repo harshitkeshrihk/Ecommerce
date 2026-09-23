@@ -179,8 +179,10 @@ private fun CalendarDayRow(day: CalendarDay) {
             }
             day.work.forEach { (order, packs) ->
                 Text(
-                    "• $packs packs for #${order.orderId} (${order.packName})",
-                    style = MaterialTheme.typography.bodySmall
+                    "• $packs packs for #${order.orderId} (${order.packName})" +
+                        if (order.canEnterProduction) "" else " · awaiting logo approval",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (order.canEnterProduction) Color.Unspecified else Color(0xFFEF6C00)
                 )
             }
             day.due.forEach { order ->

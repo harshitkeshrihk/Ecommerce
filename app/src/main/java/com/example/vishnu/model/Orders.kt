@@ -46,5 +46,6 @@ data class Order( // <--- This is the class for Active/Past lists
     val status: String,
     @SerialName("payment_id") val paymentId: String,
     @SerialName("shipping_address") val shippingAddress: String,
-    val channel: String = "retail"
+    val channel: String = "retail",
+    @SerialName("user_id") val userId: String? = null
 )

@@ -42,8 +42,13 @@ class GiftingOrderRepository @Inject constructor(
         shipByDate: LocalDate,
         address: String,
         paymentId: String,
-        amountPaid: Double
+        amountPaid: Double,
+        logoPath: String? = null,
+        logoNotes: String? = null
     ): GiftingOrderResult = withContext(Dispatchers.IO) {
+        if (occasion == OccasionType.CORPORATE && logoPath == null) {
+            return@withContext GiftingOrderResult.Failed("Corporate orders need a logo")
+        }
         val userId = currentUser.userId()
             ?: return@withContext GiftingOrderResult.Failed("Not signed in")
         val storeId = draft.lines.firstOrNull()?.product?.storeId
@@ -90,7 +95,9 @@ class GiftingOrderRepository @Inject constructor(
                     },
                     personalizationText = personalization.trim().ifBlank { null },
                     shipByDate = shipByDate.toString(),
-                    balanceDueDate = GiftingRules.balanceDueDate(shipByDate).toString()
+                    balanceDueDate = GiftingRules.balanceDueDate(shipByDate).toString(),
+                    logoPath = logoPath,
+                    logoNotes = logoNotes?.trim()?.ifBlank { null }
                 )
             )
 

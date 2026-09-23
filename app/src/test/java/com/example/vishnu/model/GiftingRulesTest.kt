@@ -196,4 +196,52 @@ class GiftingRulesTest {
         assertFalse(order.isFullyPaid)
         assertTrue(order.copy(payments = order.payments + GiftingPayment("pay_2", 16_200.0, "balance")).isFullyPaid)
     }
+
+    // --- Corporate proofing (slice 4a) ---
+
+    private fun corporate(vararg proofs: BrandAsset, occasion: String = "corporate") = GiftingOrder(
+        orderId = 7, occasionType = occasion, packName = "Diwali Hamper", packCount = 300,
+        packContents = emptyList(), shipByDate = "2026-10-20",
+        order = Order(7, "2026-09-24T10:00:00", 240_000.0, "ADVANCE_PAID", "pay", "addr", "gifting", "user-9"),
+        logoPath = "user-9/logos/a.png",
+        proofs = proofs.toList()
+    )
+
+    private fun proof(version: Int, status: String) =
+        BrandAsset("p$version", 7, version, "user-9/proofs/7/v$version.png", status)
+
+    @Test
+    fun `wedding and event orders never need a proof`() {
+        val wedding = corporate(occasion = "wedding")
+        assertEquals(ProofStatus.NOT_REQUIRED, wedding.proofStatus)
+        assertTrue(wedding.canEnterProduction)
+    }
+
+    @Test
+    fun `corporate order with no proof yet is waiting on the team and blocked from production`() {
+        val order = corporate()
+        assertEquals(ProofStatus.AWAITING_PROOF, order.proofStatus)
+        assertFalse(order.canEnterProduction)
+    }
+
+    @Test
+    fun `latest proof decides the status while nothing is approved`() {
+        assertEquals(ProofStatus.IN_REVIEW, corporate(proof(1, BrandAsset.IN_REVIEW)).proofStatus)
+        assertEquals(
+            ProofStatus.REVISION_REQUESTED,
+            corporate(proof(1, BrandAsset.REVISION_REQUESTED)).proofStatus
+        )
+        assertEquals(
+            ProofStatus.IN_REVIEW,
+            corporate(proof(1, BrandAsset.REVISION_REQUESTED), proof(2, BrandAsset.IN_REVIEW)).proofStatus
+        )
+        assertEquals(2, corporate(proof(2, BrandAsset.IN_REVIEW), proof(1, BrandAsset.REVISION_REQUESTED)).latestProof?.version)
+    }
+
+    @Test
+    fun `an approved proof unblocks production`() {
+        val order = corporate(proof(1, BrandAsset.REVISION_REQUESTED), proof(2, BrandAsset.APPROVED))
+        assertEquals(ProofStatus.APPROVED, order.proofStatus)
+        assertTrue(order.canEnterProduction)
+    }
 }

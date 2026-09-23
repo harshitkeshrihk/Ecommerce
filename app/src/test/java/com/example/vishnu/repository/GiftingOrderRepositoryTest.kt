@@ -158,4 +158,34 @@ class GiftingOrderRepositoryTest {
         val result = repo.payBalance(orderId = 101, paymentId = "pay_bal", amount = 1.0)
         assertTrue((result as GiftingOrderResult.Failed).message.contains("pay_bal"))
     }
+
+    // --- Corporate logo (slice 4a) ---
+
+    @Test
+    fun `a corporate order without a logo is refused and nothing is written`() = runTest {
+        val result = repo.placeGiftingOrder(
+            draft, OccasionType.CORPORATE, 150, "", LocalDate.of(2026, 11, 1), "addr", "pay_c", 27_000.0,
+            logoPath = null
+        )
+        assertTrue(result is GiftingOrderResult.Failed)
+        assertTrue(orderDb.orders.isEmpty())
+    }
+
+    @Test
+    fun `corporate logo path and placement notes are saved on the gifting row`() = runTest {
+        repo.placeGiftingOrder(
+            draft, OccasionType.CORPORATE, 150, "", LocalDate.of(2026, 11, 1), "addr", "pay_c", 27_000.0,
+            logoPath = "user-1/logos/abc.png", logoNotes = "  Gold foil on the lid  "
+        )
+        val row = giftingDb.rows.single()
+        assertEquals("corporate", row.occasionType)
+        assertEquals("user-1/logos/abc.png", row.logoPath)
+        assertEquals("Gold foil on the lid", row.logoNotes)
+    }
+
+    @Test
+    fun `non-corporate orders carry no logo`() = runTest {
+        place()
+        assertNull(giftingDb.rows.single().logoPath)
+    }
 }

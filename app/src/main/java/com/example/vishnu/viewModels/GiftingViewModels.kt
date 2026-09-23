@@ -1,5 +1,7 @@
 package com.example.vishnu.viewModels
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vishnu.model.BudgetTier
@@ -17,6 +19,7 @@ import com.example.vishnu.model.GiftingOrder
 import com.example.vishnu.model.GiftingRules
 import com.example.vishnu.model.OccasionType
 import com.example.vishnu.model.Product
+import com.example.vishnu.repository.BrandingRepository
 import com.example.vishnu.repository.GiftPackRepository
 import com.example.vishnu.repository.GiftingOrderRepository
 import com.example.vishnu.repository.GiftingOrderResult
@@ -25,6 +28,8 @@ import com.example.vishnu.repository.ProfileRepository
 import com.example.vishnu.utils.PaymentPurpose
 import com.example.vishnu.utils.PaymentResult
 import com.example.vishnu.utils.PaymentRouter
+import com.example.vishnu.utils.readBrandImage
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.auth.Auth
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -139,13 +144,18 @@ class GiftPackBuilderViewModel @Inject constructor(
     private val giftingOrderRepository: GiftingOrderRepository,
     private val productionRepository: ProductionRepository,
     private val profileRepository: ProfileRepository,
+    private val brandingRepository: BrandingRepository,
     private val auth: Auth,
-    private val paymentRouter: PaymentRouter
+    private val paymentRouter: PaymentRouter,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    // Corporate (branding, budget builder) arrives in slice 4.
-    val selectableOccasions = listOf(OccasionType.EVENT, OccasionType.WEDDING)
+    val selectableOccasions = listOf(OccasionType.EVENT, OccasionType.WEDDING, OccasionType.CORPORATE)
     val occasion = MutableStateFlow(OccasionType.EVENT)
+
+    /** Corporate only: the logo to brand the gifts with, and where it should go. */
+    val logoUri = MutableStateFlow<Uri?>(null)
+    val logoNotes = MutableStateFlow("")
 
     private val _draft = MutableStateFlow(GiftPackDraft(name = "Custom Gift Pack", sourcePackId = null, lines = emptyList()))
     val draft = _draft.asStateFlow()
@@ -216,7 +226,9 @@ class GiftPackBuilderViewModel @Inject constructor(
         val shipByDate: LocalDate,
         val address: String,
         val amountNow: Double,
-        val occasion: OccasionType
+        val occasion: OccasionType,
+        val logoPath: String?,
+        val logoNotes: String?
     )
 
     private var pendingCheckout: PendingCheckout? = null
@@ -278,6 +290,17 @@ class GiftPackBuilderViewModel @Inject constructor(
                 _events.emit(BuilderEvent.Message(error))
                 return@launch
             }
+            val isCorporate = occasion.value == OccasionType.CORPORATE
+            if (isCorporate && logoUri.value == null) {
+                _events.emit(BuilderEvent.Message("Upload your company logo for a corporate order"))
+                return@launch
+            }
+            val logoImage = if (isCorporate) {
+                readBrandImage(context, logoUri.value!!).getOrElse {
+                    _events.emit(BuilderEvent.Message(it.message ?: "Couldn't read the logo"))
+                    return@launch
+                }
+            } else null
             val orderTotal = draft.totalFor(packCount!!)
             val payNow = paymentPlan.value.payNow?.let { Math.round(it * 100) / 100.0 } // whole paise
             GiftingRules.validatePayNow(payNow, orderTotal, shipByDate.value!!, LocalDate.now())?.let {
@@ -306,6 +329,18 @@ class GiftPackBuilderViewModel @Inject constructor(
                 }
             }
 
+            // Upload the logo before charging, so a paid order always has its logo.
+            val logoPath = logoImage?.let { image ->
+                val userId = auth.currentUserOrNull()?.id
+                val path = userId?.let { brandingRepository.uploadLogo(it, image.bytes, image.extension) }
+                if (path == null) {
+                    _events.emit(BuilderEvent.Message("Couldn't upload the logo. Please try again."))
+                    _isProcessing.value = false
+                    return@launch
+                }
+                path
+            }
+
             pendingCheckout = PendingCheckout(
                 draft = draft.copy(name = draft.name.trim().ifBlank { "Custom Gift Pack" }),
                 packCount = packCount!!,
@@ -313,7 +348,9 @@ class GiftPackBuilderViewModel @Inject constructor(
                 shipByDate = shipByDate.value!!,
                 address = address.value.trim(),
                 amountNow = payNow!!,
-                occasion = occasion.value
+                occasion = occasion.value,
+                logoPath = logoPath,
+                logoNotes = if (isCorporate) logoNotes.value else null
             )
 
             val user = auth.currentUserOrNull()
@@ -340,7 +377,9 @@ class GiftPackBuilderViewModel @Inject constructor(
                     shipByDate = checkout.shipByDate,
                     address = checkout.address,
                     paymentId = result.paymentId,
-                    amountPaid = checkout.amountNow
+                    amountPaid = checkout.amountNow,
+                    logoPath = checkout.logoPath,
+                    logoNotes = checkout.logoNotes
                 )) {
                     is GiftingOrderResult.Placed -> _events.emit(BuilderEvent.OrderPlaced(placed.orderId))
                     is GiftingOrderResult.Failed -> _events.emit(BuilderEvent.Message(placed.message))
@@ -360,9 +399,52 @@ class MyGiftingOrdersViewModel @Inject constructor(
     private val giftPackRepository: GiftPackRepository,
     private val giftingOrderRepository: GiftingOrderRepository,
     private val profileRepository: ProfileRepository,
+    private val brandingRepository: BrandingRepository,
     private val auth: Auth,
-    private val paymentRouter: PaymentRouter
+    private val paymentRouter: PaymentRouter,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    /** Order whose proof decision / logo replacement is being saved. */
+    private val _brandingBusyOrderId = MutableStateFlow<Long?>(null)
+    val brandingBusyOrderId = _brandingBusyOrderId.asStateFlow()
+
+    suspend fun imageUrl(path: String): String? = brandingRepository.signedUrl(path)
+
+    fun approveProof(order: GiftingOrder) = decide(order, approve = true, comment = null)
+
+    fun requestProofChanges(order: GiftingOrder, comment: String) = decide(order, approve = false, comment = comment)
+
+    private fun decide(order: GiftingOrder, approve: Boolean, comment: String?) {
+        val proof = order.latestProof ?: return
+        viewModelScope.launch {
+            _brandingBusyOrderId.value = order.orderId
+            val error = brandingRepository.decideProof(proof.id, approve, comment)
+            _events.emit(
+                Event.Message(
+                    error ?: if (approve) "Logo approved — your order can now go into production"
+                    else "Thanks — our team will send an updated proof"
+                )
+            )
+            _brandingBusyOrderId.value = null
+            refresh()
+        }
+    }
+
+    fun replaceLogo(order: GiftingOrder, uri: Uri, notes: String) {
+        viewModelScope.launch {
+            val image = readBrandImage(context, uri).getOrElse {
+                _events.emit(Event.Message(it.message ?: "Couldn't read the logo"))
+                return@launch
+            }
+            val userId = auth.currentUserOrNull()?.id ?: return@launch
+            _brandingBusyOrderId.value = order.orderId
+            val error = brandingRepository.replaceLogo(userId, order.orderId, image.bytes, image.extension, notes)
+            _events.emit(Event.Message(error ?: "Logo updated"))
+            _brandingBusyOrderId.value = null
+            refresh()
+        }
+    }
 
     private val _orders = MutableStateFlow<List<GiftingOrder>>(emptyList())
     val orders = _orders.asStateFlow()
@@ -541,7 +623,9 @@ class AdminGiftPackEditViewModel @Inject constructor(
 
 @HiltViewModel
 class AdminGiftingOrdersViewModel @Inject constructor(
-    private val giftPackRepository: GiftPackRepository
+    private val giftPackRepository: GiftPackRepository,
+    private val brandingRepository: BrandingRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _orders = MutableStateFlow<List<GiftingOrder>>(emptyList())
@@ -550,10 +634,40 @@ class AdminGiftingOrdersViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(true)
     val isLoading = _isLoading.asStateFlow()
 
+    /** Order whose proof is uploading. */
+    private val _uploadingOrderId = MutableStateFlow<Long?>(null)
+    val uploadingOrderId = _uploadingOrderId.asStateFlow()
+
+    private val _messages = MutableSharedFlow<String>()
+    val messages = _messages.asSharedFlow()
+
     init {
+        refresh()
+    }
+
+    fun refresh() {
         viewModelScope.launch {
             _orders.value = giftPackRepository.getGiftingOrders()
             _isLoading.value = false
+        }
+    }
+
+    suspend fun imageUrl(path: String): String? = brandingRepository.signedUrl(path)
+
+    /** Uploads the next proof version for a corporate order. */
+    fun uploadProof(order: GiftingOrder, uri: Uri, note: String) {
+        val customerId = order.order.userId ?: return
+        viewModelScope.launch {
+            val image = readBrandImage(context, uri).getOrElse {
+                _messages.emit(it.message ?: "Couldn't read the image")
+                return@launch
+            }
+            _uploadingOrderId.value = order.orderId
+            val version = (order.latestProof?.version ?: 0) + 1
+            val ok = brandingRepository.uploadProof(customerId, order.orderId, version, image.bytes, image.extension, note)
+            _messages.emit(if (ok) "Proof v$version sent to the customer" else "Could not upload the proof")
+            _uploadingOrderId.value = null
+            refresh()
         }
     }
 }
