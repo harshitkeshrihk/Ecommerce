@@ -143,9 +143,9 @@ class GiftPackBuilderViewModel @Inject constructor(
     private val paymentRouter: PaymentRouter
 ) : ViewModel() {
 
-    // Slice 1 ships event gifting only; wedding (installments) and corporate
-    // (branding) plug in here in later slices.
-    val occasion = OccasionType.EVENT
+    // Corporate (branding, budget builder) arrives in slice 4.
+    val selectableOccasions = listOf(OccasionType.EVENT, OccasionType.WEDDING)
+    val occasion = MutableStateFlow(OccasionType.EVENT)
 
     private val _draft = MutableStateFlow(GiftPackDraft(name = "Custom Gift Pack", sourcePackId = null, lines = emptyList()))
     val draft = _draft.asStateFlow()
@@ -215,7 +215,8 @@ class GiftPackBuilderViewModel @Inject constructor(
         val personalization: String,
         val shipByDate: LocalDate,
         val address: String,
-        val amountNow: Double
+        val amountNow: Double,
+        val occasion: OccasionType
     )
 
     private var pendingCheckout: PendingCheckout? = null
@@ -311,7 +312,8 @@ class GiftPackBuilderViewModel @Inject constructor(
                 personalization = personalization.value,
                 shipByDate = shipByDate.value!!,
                 address = address.value.trim(),
-                amountNow = payNow!!
+                amountNow = payNow!!,
+                occasion = occasion.value
             )
 
             val user = auth.currentUserOrNull()
@@ -332,7 +334,7 @@ class GiftPackBuilderViewModel @Inject constructor(
             result is PaymentResult.Success -> {
                 when (val placed = giftingOrderRepository.placeGiftingOrder(
                     draft = checkout.draft,
-                    occasion = occasion,
+                    occasion = checkout.occasion,
                     packCount = checkout.packCount,
                     personalization = checkout.personalization,
                     shipByDate = checkout.shipByDate,

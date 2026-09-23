@@ -90,7 +90,8 @@ class ProfileRepository @Inject constructor(
                 .select {
                     filter { eq("user_id", userId) }
                     // Filter for statuses that are "Active"
-                    filter { isIn("status", listOf("ADVANCE_PAID", "PAID", "PROCESSING", "SHIPPED")) }
+                    // CONFIRMED = wholesale Quick-Order / accepted RFQ (billed offline)
+                    filter { isIn("status", listOf("CONFIRMED", "ADVANCE_PAID", "PAID", "PROCESSING", "SHIPPED")) }
                     order("created_at", order = SupabaseOrder.DESCENDING)
                 }
                 .decodeList<Order>()

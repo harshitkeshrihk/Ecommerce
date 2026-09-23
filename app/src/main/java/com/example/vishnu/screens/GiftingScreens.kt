@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.vishnu.model.GiftPack
 import com.example.vishnu.model.GiftingRules
+import com.example.vishnu.model.OccasionType
 import com.example.vishnu.uicomponents.GiftProductPickerDialog
 import com.example.vishnu.uicomponents.PackContentsEditor
 import com.example.vishnu.utils.formatRupees
@@ -65,7 +66,7 @@ fun GiftingHomeScreen(
                     Column {
                         Text("Bulk Gifting")
                         Text(
-                            "Return gifts for functions, festivals & events",
+                            "Return gifts for weddings, functions & festivals",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.Gray
                         )
@@ -201,6 +202,7 @@ fun GiftPackBuilderScreen(
     val paymentPlan by viewModel.paymentPlan.collectAsState()
     val payChoice by viewModel.payChoice.collectAsState()
     val customPayText by viewModel.customPayText.collectAsState()
+    val occasion by viewModel.occasion.collectAsState()
     val giftingProducts by viewModel.giftingProducts.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
@@ -272,6 +274,18 @@ fun GiftPackBuilderScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            Text("Occasion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                viewModel.selectableOccasions.forEach { option ->
+                    FilterChip(
+                        selected = occasion == option,
+                        onClick = { viewModel.occasion.value = option },
+                        label = { Text(option.label) }
+                    )
+                }
+            }
+
             SectionTitle("1. What's in each pack")
             OutlinedTextField(
                 value = draft.name,
@@ -306,7 +320,12 @@ fun GiftPackBuilderScreen(
                 value = personalization,
                 onValueChange = { viewModel.personalization.value = it.take(GiftingRules.MAX_PERSONALIZATION_LENGTH) },
                 label = { Text("Name, initials or date to engrave") },
-                placeholder = { Text("e.g. Sharma Family · Griha Pravesh 2027") },
+                placeholder = {
+                    Text(
+                        if (occasion == OccasionType.WEDDING) "e.g. Rahul ♥ Priya · 12.02.2027"
+                        else "e.g. Sharma Family · Griha Pravesh 2027"
+                    )
+                },
                 supportingText = { Text("${personalization.length}/${GiftingRules.MAX_PERSONALIZATION_LENGTH}") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
