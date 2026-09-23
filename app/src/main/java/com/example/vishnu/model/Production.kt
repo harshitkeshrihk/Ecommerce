@@ -28,7 +28,7 @@ data class OpenLoadRow(
 )
 
 /** Order statuses that still need workshop time. */
-val OPEN_PRODUCTION_STATUSES = setOf("PAID", "PROCESSING")
+val OPEN_PRODUCTION_STATUSES = setOf("ADVANCE_PAID", "PAID", "PROCESSING")
 
 // --- Capacity ---
 

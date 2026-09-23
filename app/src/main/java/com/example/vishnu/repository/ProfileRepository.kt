@@ -90,7 +90,7 @@ class ProfileRepository @Inject constructor(
                 .select {
                     filter { eq("user_id", userId) }
                     // Filter for statuses that are "Active"
-                    filter { isIn("status", listOf("PAID", "PROCESSING", "SHIPPED")) }
+                    filter { isIn("status", listOf("ADVANCE_PAID", "PAID", "PROCESSING", "SHIPPED")) }
                     order("created_at", order = SupabaseOrder.DESCENDING)
                 }
                 .decodeList<Order>()

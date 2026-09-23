@@ -28,7 +28,8 @@ class GiftingOrderRepositoryTest {
 
     private suspend fun place(
         personalization: String = "Sharma Family",
-        packCount: Int = 150
+        packCount: Int = 150,
+        amountPaid: Double = 180.0 * packCount // full by default
     ) = repo.placeGiftingOrder(
         draft = draft,
         occasion = OccasionType.EVENT,
@@ -36,7 +37,8 @@ class GiftingOrderRepositoryTest {
         personalization = personalization,
         shipByDate = LocalDate.of(2026, 11, 1),
         address = "12 MG Road",
-        paymentId = "pay_abc"
+        paymentId = "pay_abc",
+        amountPaid = amountPaid
     )
 
     @Test
@@ -95,7 +97,7 @@ class GiftingOrderRepositoryTest {
     @Test
     fun `fails for an empty pack`() = runTest {
         val result = repo.placeGiftingOrder(
-            draft.copy(lines = emptyList()), OccasionType.EVENT, 10, "", LocalDate.of(2026, 11, 1), "addr", "pay_1"
+            draft.copy(lines = emptyList()), OccasionType.EVENT, 10, "", LocalDate.of(2026, 11, 1), "addr", "pay_1", 100.0
         )
         assertTrue(result is GiftingOrderResult.Failed)
         assertTrue(orderDb.orders.isEmpty())
@@ -109,5 +111,51 @@ class GiftingOrderRepositoryTest {
 
         assertTrue(result is GiftingOrderResult.Failed)
         assertTrue((result as GiftingOrderResult.Failed).message.contains("pay_abc"))
+    }
+
+    // --- Advance + balance ---
+
+    @Test
+    fun `paying in full marks the order PAID and records a full payment`() = runTest {
+        place(amountPaid = 180.0 * 150)
+
+        assertEquals("PAID", orderDb.orders.single().second.status)
+        val payment = giftingDb.payments.single()
+        assertEquals("full", payment.kind)
+        assertEquals(27_000.0, payment.amount, 0.0)
+        assertEquals("pay_abc", payment.razorpayPaymentId)
+        assertEquals(orderDb.orders.single().first, payment.orderId)
+    }
+
+    @Test
+    fun `paying an advance marks the order ADVANCE_PAID and records an advance payment`() = runTest {
+        place(amountPaid = 10_800.0) // 40% of 27,000
+
+        assertEquals("ADVANCE_PAID", orderDb.orders.single().second.status)
+        // The order total is still the full amount - only the payment is partial.
+        assertEquals(27_000.0, orderDb.orders.single().second.totalAmount, 0.0)
+        assertEquals("advance", giftingDb.payments.single().kind)
+        assertEquals(10_800.0, giftingDb.payments.single().amount, 0.0)
+    }
+
+    @Test
+    fun `balance is due 3 days before the ship-by date`() = runTest {
+        place()
+        assertEquals("2026-10-29", giftingDb.rows.single().balanceDueDate)
+    }
+
+    @Test
+    fun `balance payment is recorded against the order`() = runTest {
+        val result = repo.payBalance(orderId = 101, paymentId = "pay_bal", amount = 16_200.0)
+
+        assertEquals(GiftingOrderResult.Placed(101), result)
+        assertEquals(Triple(101L, "pay_bal", 16_200.0), giftingDb.balancePayments.single())
+    }
+
+    @Test
+    fun `a rejected balance payment reports the payment id`() = runTest {
+        giftingDb.failBalance = true
+        val result = repo.payBalance(orderId = 101, paymentId = "pay_bal", amount = 1.0)
+        assertTrue((result as GiftingOrderResult.Failed).message.contains("pay_bal"))
     }
 }

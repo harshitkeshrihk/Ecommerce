@@ -117,12 +117,27 @@ class GiftPackRepository @Inject constructor(
     suspend fun getGiftingOrders(): List<GiftingOrder> = withContext(Dispatchers.IO) {
         try {
             postgrest["gifting_orders"]
-                .select(columns = Columns.raw("*, order:orders(*)")) {
+                .select(columns = Columns.raw("*, order:orders(*), gifting_payments(*)")) {
                     order("ship_by_date", order = SupabaseOrder.ASCENDING)
                 }
                 .decodeList<GiftingOrder>()
         } catch (e: Exception) {
             Log.e("GiftPackRepo", "Error fetching gifting orders", e)
+            emptyList()
+        }
+    }
+
+    /** The signed-in customer's own gifting orders, newest ship-by first. */
+    suspend fun getMyGiftingOrders(userId: String): List<GiftingOrder> = withContext(Dispatchers.IO) {
+        try {
+            postgrest["gifting_orders"]
+                .select(columns = Columns.raw("*, order:orders!inner(*), gifting_payments(*)")) {
+                    filter { eq("order.user_id", userId) }
+                    order("ship_by_date", order = SupabaseOrder.DESCENDING)
+                }
+                .decodeList<GiftingOrder>()
+        } catch (e: Exception) {
+            Log.e("GiftPackRepo", "Error fetching my gifting orders", e)
             emptyList()
         }
     }

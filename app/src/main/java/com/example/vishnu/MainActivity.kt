@@ -38,6 +38,7 @@ import com.example.vishnu.screens.AdminGiftPacksScreen
 import com.example.vishnu.screens.AdminGiftingOrdersScreen
 import com.example.vishnu.screens.GiftPackBuilderScreen
 import com.example.vishnu.screens.GiftingHomeScreen
+import com.example.vishnu.screens.MyGiftingOrdersScreen
 import com.example.vishnu.screens.AdminQuotePipelineScreen
 import com.example.vishnu.screens.AuthScreen
 import com.example.vishnu.screens.CartScreen
@@ -312,7 +313,15 @@ fun VishnuCrockeryApp(
                 GiftingHomeScreen(
                     onBack = { navController.popBackStack() },
                     onPackClick = { packId -> navController.navigate("gift_pack_builder?packId=$packId") },
-                    onBuildOwnClick = { navController.navigate("gift_pack_builder") }
+                    onBuildOwnClick = { navController.navigate("gift_pack_builder") },
+                    onMyOrdersClick = { navController.navigate("my_gifting_orders") }
+                )
+            }
+
+            composable("my_gifting_orders") {
+                MyGiftingOrdersScreen(
+                    onBack = { navController.popBackStack() },
+                    onInitiatePayment = onInitiatePayment
                 )
             }
 

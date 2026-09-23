@@ -75,13 +75,13 @@ class AdminViewModel @Inject constructor(
 
     fun changeStatus(orderId: Long, newStatus: String) {
         viewModelScope.launch {
-            val success = adminRepository.updateOrderStatus(orderId, newStatus)
-            if (success) {
+            val error = adminRepository.updateOrderStatus(orderId, newStatus)
+            if (error == null) {
                 _toastMessage.emit("Order #$orderId updated to $newStatus")
 //                loadAllOrders() // Refresh list
                 currentStoreId?.let { loadOrders(it) }
             } else {
-                _toastMessage.emit("Failed to update status")
+                _toastMessage.emit(error)
             }
         }
     }

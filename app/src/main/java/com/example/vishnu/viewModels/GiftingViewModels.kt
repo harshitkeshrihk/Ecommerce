@@ -119,6 +119,20 @@ private fun capacityFor(snapshot: CapacitySnapshot?, shipBy: LocalDate?, packCou
     }
 }
 
+/** How much the customer pays at checkout. */
+enum class PayChoice { MIN_ADVANCE, FULL, CUSTOM }
+
+data class PaymentPlan(
+    val total: Double,
+    val minAdvance: Double,
+    /** Ship-by is too close for a later balance payment. */
+    val fullRequired: Boolean,
+    /** What will be charged now; null if the custom amount isn't a number yet. */
+    val payNow: Double?,
+    /** Null until a ship-by date is picked. */
+    val balanceDueDate: LocalDate?
+)
+
 @HiltViewModel
 class GiftPackBuilderViewModel @Inject constructor(
     private val giftPackRepository: GiftPackRepository,
@@ -154,6 +168,27 @@ class GiftPackBuilderViewModel @Inject constructor(
         draft.totalFor(countText.toIntOrNull() ?: 0)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
+    val payChoice = MutableStateFlow(PayChoice.MIN_ADVANCE)
+    val customPayText = MutableStateFlow("")
+
+    val paymentPlan: StateFlow<PaymentPlan> =
+        combine(total, shipByDate, payChoice, customPayText) { total, shipBy, choice, customText ->
+            val fullRequired = shipBy != null && GiftingRules.requiresFullPayment(shipBy, LocalDate.now())
+            val minAdvance = GiftingRules.minAdvance(total)
+            PaymentPlan(
+                total = total,
+                minAdvance = minAdvance,
+                fullRequired = fullRequired,
+                payNow = when {
+                    fullRequired -> total
+                    choice == PayChoice.MIN_ADVANCE -> minAdvance
+                    choice == PayChoice.FULL -> total
+                    else -> customText.toDoubleOrNull()
+                },
+                balanceDueDate = shipBy?.let(GiftingRules::balanceDueDate)
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, PaymentPlan(0.0, 0.0, false, 0.0, null))
+
     private val capacitySnapshot = MutableStateFlow<CapacitySnapshot?>(null)
 
     /** Live checkProductionCapacity result for the chosen ship-by date and pack count. */
@@ -179,7 +214,8 @@ class GiftPackBuilderViewModel @Inject constructor(
         val packCount: Int,
         val personalization: String,
         val shipByDate: LocalDate,
-        val address: String
+        val address: String,
+        val amountNow: Double
     )
 
     private var pendingCheckout: PendingCheckout? = null
@@ -241,6 +277,12 @@ class GiftPackBuilderViewModel @Inject constructor(
                 _events.emit(BuilderEvent.Message(error))
                 return@launch
             }
+            val orderTotal = draft.totalFor(packCount!!)
+            val payNow = paymentPlan.value.payNow?.let { Math.round(it * 100) / 100.0 } // whole paise
+            GiftingRules.validatePayNow(payNow, orderTotal, shipByDate.value!!, LocalDate.now())?.let {
+                _events.emit(BuilderEvent.Message(it))
+                return@launch
+            }
             _isProcessing.value = true
 
             // Re-check against fresh data: other customers may have booked the
@@ -268,7 +310,8 @@ class GiftPackBuilderViewModel @Inject constructor(
                 packCount = packCount!!,
                 personalization = personalization.value,
                 shipByDate = shipByDate.value!!,
-                address = address.value.trim()
+                address = address.value.trim(),
+                amountNow = payNow!!
             )
 
             val user = auth.currentUserOrNull()
@@ -276,7 +319,7 @@ class GiftPackBuilderViewModel @Inject constructor(
                 ?: profileRepository.getUserProfile()?.phoneNumber.orEmpty()
 
             paymentRouter.expect(PaymentPurpose.GIFTING)
-            _events.emit(BuilderEvent.LaunchPayment(draft.totalFor(packCount), user?.email.orEmpty(), phone))
+            _events.emit(BuilderEvent.LaunchPayment(payNow, user?.email.orEmpty(), phone))
         }
     }
 
@@ -294,7 +337,8 @@ class GiftPackBuilderViewModel @Inject constructor(
                     personalization = checkout.personalization,
                     shipByDate = checkout.shipByDate,
                     address = checkout.address,
-                    paymentId = result.paymentId
+                    paymentId = result.paymentId,
+                    amountPaid = checkout.amountNow
                 )) {
                     is GiftingOrderResult.Placed -> _events.emit(BuilderEvent.OrderPlaced(placed.orderId))
                     is GiftingOrderResult.Failed -> _events.emit(BuilderEvent.Message(placed.message))
@@ -302,6 +346,89 @@ class GiftPackBuilderViewModel @Inject constructor(
             }
         }
         _isProcessing.value = false
+    }
+}
+
+// ---------------------------------------------------------------------
+// Customer: my gifting orders + pay balance
+// ---------------------------------------------------------------------
+
+@HiltViewModel
+class MyGiftingOrdersViewModel @Inject constructor(
+    private val giftPackRepository: GiftPackRepository,
+    private val giftingOrderRepository: GiftingOrderRepository,
+    private val profileRepository: ProfileRepository,
+    private val auth: Auth,
+    private val paymentRouter: PaymentRouter
+) : ViewModel() {
+
+    private val _orders = MutableStateFlow<List<GiftingOrder>>(emptyList())
+    val orders = _orders.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading = _isLoading.asStateFlow()
+
+    /** Order whose balance payment is in flight (disables its button). */
+    private val _payingOrderId = MutableStateFlow<Long?>(null)
+    val payingOrderId = _payingOrderId.asStateFlow()
+
+    sealed class Event {
+        data class LaunchPayment(val amount: Double, val email: String, val phone: String) : Event()
+        data class Message(val text: String) : Event()
+    }
+
+    private val _events = MutableSharedFlow<Event>()
+    val events = _events.asSharedFlow()
+
+    private data class PendingBalance(val orderId: Long, val amount: Double)
+    private var pendingBalance: PendingBalance? = null
+
+    init {
+        viewModelScope.launch {
+            paymentRouter.giftingResults.collect { onPaymentResult(it) }
+        }
+        refresh()
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val userId = auth.currentUserOrNull()?.id
+            _orders.value = if (userId == null) emptyList() else giftPackRepository.getMyGiftingOrders(userId)
+            _isLoading.value = false
+        }
+    }
+
+    fun payBalance(order: GiftingOrder) {
+        if (_payingOrderId.value != null || order.isFullyPaid) return
+        viewModelScope.launch {
+            _payingOrderId.value = order.orderId
+            val amount = Math.round(order.balance * 100) / 100.0
+            pendingBalance = PendingBalance(order.orderId, amount)
+
+            val user = auth.currentUserOrNull()
+            val phone = user?.phone?.takeIf { it.isNotBlank() }
+                ?: profileRepository.getUserProfile()?.phoneNumber.orEmpty()
+
+            paymentRouter.expect(PaymentPurpose.GIFTING)
+            _events.emit(Event.LaunchPayment(amount, user?.email.orEmpty(), phone))
+        }
+    }
+
+    private suspend fun onPaymentResult(result: PaymentResult) {
+        val pending = pendingBalance ?: return // not ours (e.g. the pack builder's checkout)
+        pendingBalance = null
+        when (result) {
+            is PaymentResult.Failure -> _events.emit(Event.Message("Payment failed: ${result.message}"))
+            is PaymentResult.Success -> {
+                when (val r = giftingOrderRepository.payBalance(pending.orderId, result.paymentId, pending.amount)) {
+                    is GiftingOrderResult.Placed -> _events.emit(Event.Message("Balance paid — order #${pending.orderId} is fully paid"))
+                    is GiftingOrderResult.Failed -> _events.emit(Event.Message(r.message))
+                }
+                refresh()
+            }
+        }
+        _payingOrderId.value = null
     }
 }
 

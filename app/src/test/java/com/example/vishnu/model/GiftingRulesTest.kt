@@ -133,4 +133,67 @@ class GiftingRulesTest {
     fun `blank address is rejected`() {
         assertEquals("Enter a delivery address", validate(address = "   "))
     }
+
+    // --- Advance + balance ---
+
+    @Test
+    fun `minimum advance is 40 percent rounded up to the rupee, never above the total`() {
+        assertEquals(10_800.0, GiftingRules.minAdvance(27_000.0), 0.0)
+        assertEquals(401.0, GiftingRules.minAdvance(1_000.5), 0.0) // 400.2 -> 401
+        assertEquals(0.5, GiftingRules.minAdvance(0.5), 0.0)
+    }
+
+    @Test
+    fun `balance is due 3 days before ship-by`() {
+        assertEquals(LocalDate.of(2026, 10, 29), GiftingRules.balanceDueDate(LocalDate.of(2026, 11, 1)))
+    }
+
+    @Test
+    fun `full payment is required once the balance due date is today or past`() {
+        assertTrue(GiftingRules.requiresFullPayment(today.plusDays(3), today))  // due today
+        assertTrue(GiftingRules.requiresFullPayment(today.plusDays(1), today))
+        assertFalse(GiftingRules.requiresFullPayment(today.plusDays(4), today)) // due tomorrow
+    }
+
+    private val shipByLater = today.plusDays(30)
+
+    @Test
+    fun `pay-now amount between 40 percent and the total passes`() {
+        assertNull(GiftingRules.validatePayNow(400.0, 1_000.0, shipByLater, today))
+        assertNull(GiftingRules.validatePayNow(750.0, 1_000.0, shipByLater, today))
+        assertNull(GiftingRules.validatePayNow(1_000.0, 1_000.0, shipByLater, today))
+    }
+
+    @Test
+    fun `pay-now below the minimum advance is rejected`() {
+        assertEquals("Minimum advance is 40% of the total", GiftingRules.validatePayNow(399.0, 1_000.0, shipByLater, today))
+    }
+
+    @Test
+    fun `pay-now above the total, zero or missing is rejected`() {
+        assertEquals("You can't pay more than the order total", GiftingRules.validatePayNow(1_000.5, 1_000.0, shipByLater, today))
+        assertEquals("Enter the amount to pay now", GiftingRules.validatePayNow(0.0, 1_000.0, shipByLater, today))
+        assertEquals("Enter the amount to pay now", GiftingRules.validatePayNow(null, 1_000.0, shipByLater, today))
+    }
+
+    @Test
+    fun `when the ship-by date is close only the full amount is accepted`() {
+        val soon = today.plusDays(2)
+        assertTrue(GiftingRules.validatePayNow(900.0, 1_000.0, soon, today)!!.contains("full amount is due now"))
+        assertNull(GiftingRules.validatePayNow(1_000.0, 1_000.0, soon, today))
+    }
+
+    @Test
+    fun `order payment totals and balance`() {
+        val order = GiftingOrder(
+            orderId = 1, occasionType = "wedding", packName = "Set", packCount = 100,
+            packContents = emptyList(), shipByDate = "2026-11-01", balanceDueDate = "2026-10-29",
+            order = Order(1, "2026-09-23T10:00:00", 27_000.0, "ADVANCE_PAID", "pay", "addr", "gifting"),
+            payments = listOf(GiftingPayment("pay_1", 10_800.0, "advance"))
+        )
+        assertEquals(10_800.0, order.amountPaid, 0.0)
+        assertEquals(16_200.0, order.balance, 0.0)
+        assertFalse(order.isFullyPaid)
+        assertTrue(order.copy(payments = order.payments + GiftingPayment("pay_2", 16_200.0, "balance")).isFullyPaid)
+    }
 }

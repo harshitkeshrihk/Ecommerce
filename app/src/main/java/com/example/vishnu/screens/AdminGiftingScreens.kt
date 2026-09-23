@@ -296,6 +296,7 @@ private fun GiftingOrderCard(order: GiftingOrder) {
                 fontWeight = FontWeight.SemiBold
             )
             Text("${order.packCount} × ${order.packName}  ·  ${formatRupees(order.order.totalAmount)}")
+            GiftingPaymentLine(order)
             Text(
                 "Each pack: " + order.packContents.joinToString(", ") { "${it.qtyPerPack} × ${it.productName}" },
                 style = MaterialTheme.typography.bodySmall

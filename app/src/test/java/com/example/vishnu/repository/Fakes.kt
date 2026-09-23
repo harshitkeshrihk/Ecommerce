@@ -103,4 +103,17 @@ class FakeGiftingOrderDataSource : GiftingOrderDataSource {
         if (failInsert) error("gifting_orders insert rejected")
         rows += request
     }
+
+    val payments = mutableListOf<com.example.vishnu.model.GiftingPaymentRequest>()
+    val balancePayments = mutableListOf<Triple<Long, String, Double>>()
+    var failBalance = false
+
+    override suspend fun insertPayment(request: com.example.vishnu.model.GiftingPaymentRequest) {
+        payments += request
+    }
+
+    override suspend fun payBalance(orderId: Long, razorpayPaymentId: String, amount: Double) {
+        if (failBalance) error("Balance payment must be exactly the remaining amount")
+        balancePayments += Triple(orderId, razorpayPaymentId, amount)
+    }
 }

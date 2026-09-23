@@ -61,8 +61,8 @@ class AdminRepository @Inject constructor(
         }
     }
 
-    // 3. Update Order Status
-    suspend fun updateOrderStatus(orderId: Long, newStatus: String): Boolean = withContext(Dispatchers.IO) {
+    // 3. Update Order Status — returns null on success, else a reason to show the admin
+    suspend fun updateOrderStatus(orderId: Long, newStatus: String): String? = withContext(Dispatchers.IO) {
         try {
             postgrest["orders"]
                 .update({
@@ -70,10 +70,15 @@ class AdminRepository @Inject constructor(
                 }) {
                     filter { eq("id", orderId) }
                 }
-            true
+            null
         } catch (e: Exception) {
             Log.e("AdminRepo", "Error updating status", e)
-            false
+            // block_unpaid_gifting_dispatch (006) rejects dispatching a gifting order with a balance due.
+            if (e.message?.contains("unpaid balance") == true) {
+                "Order #$orderId still has an unpaid balance — it can't be dispatched yet"
+            } else {
+                "Failed to update status"
+            }
         }
     }
 

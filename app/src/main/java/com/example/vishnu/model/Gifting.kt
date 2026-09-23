@@ -94,6 +94,35 @@ object GiftingRules {
     /** Engraving/printing length limit for personalization text. */
     const val MAX_PERSONALIZATION_LENGTH = 40
 
+    /** Smallest share of the order total the customer can pay at checkout. */
+    const val MIN_ADVANCE_PERCENT = 40
+
+    /** The remaining balance is due this many days before the ship-by date. */
+    const val BALANCE_DUE_DAYS_BEFORE_SHIP = 3L
+
+    /** 40% of the total, rounded UP to the whole rupee (never more than the total). */
+    fun minAdvance(total: Double): Double =
+        minOf(kotlin.math.ceil(total * MIN_ADVANCE_PERCENT / 100.0), total)
+
+    fun balanceDueDate(shipBy: LocalDate): LocalDate = shipBy.minusDays(BALANCE_DUE_DAYS_BEFORE_SHIP)
+
+    /** When the balance would already be due, there's no time for a second payment. */
+    fun requiresFullPayment(shipBy: LocalDate, today: LocalDate): Boolean =
+        !balanceDueDate(shipBy).isAfter(today)
+
+    fun isFullyPaid(paid: Double, total: Double): Boolean = paid >= total - 0.005
+
+    /** Returns the problem with the amount the customer wants to pay now, or null if it's acceptable. */
+    fun validatePayNow(amount: Double?, total: Double, shipBy: LocalDate, today: LocalDate): String? = when {
+        amount == null || amount <= 0.0 -> "Enter the amount to pay now"
+        amount > total + 0.005 -> "You can't pay more than the order total"
+        requiresFullPayment(shipBy, today) && !isFullyPaid(amount, total) ->
+            "The ship-by date is less than ${BALANCE_DUE_DAYS_BEFORE_SHIP + 1} days away, so the full amount is due now"
+        amount < minAdvance(total) - 0.005 ->
+            "Minimum advance is $MIN_ADVANCE_PERCENT% of the total"
+        else -> null
+    }
+
     val BUDGET_TIERS = listOf(
         BudgetTier("Under ₹300", 0.0, 300.0),
         BudgetTier("₹300 – ₹700", 300.0, 700.0),
@@ -140,7 +169,24 @@ data class GiftingOrderRequest(
     @SerialName("pack_count") val packCount: Int,
     @SerialName("pack_contents") val packContents: List<PackContentLine>,
     @SerialName("personalization_text") val personalizationText: String?,
-    @SerialName("ship_by_date") val shipByDate: String // ISO yyyy-MM-dd
+    @SerialName("ship_by_date") val shipByDate: String, // ISO yyyy-MM-dd
+    @SerialName("balance_due_date") val balanceDueDate: String // ISO yyyy-MM-dd
+)
+
+@Serializable
+data class GiftingPaymentRequest(
+    @SerialName("order_id") val orderId: Long,
+    @SerialName("razorpay_payment_id") val razorpayPaymentId: String,
+    val amount: Double,
+    val kind: String // advance | full (balance goes through pay_gifting_balance)
+)
+
+@Serializable
+data class GiftingPayment(
+    @SerialName("razorpay_payment_id") val razorpayPaymentId: String,
+    val amount: Double,
+    val kind: String,
+    @SerialName("created_at") val createdAt: String? = null
 )
 
 /** Admin view: a gifting order joined with its parent order row. */
@@ -153,5 +199,11 @@ data class GiftingOrder(
     @SerialName("pack_contents") val packContents: List<PackContentLine>,
     @SerialName("personalization_text") val personalizationText: String? = null,
     @SerialName("ship_by_date") val shipByDate: String,
-    val order: Order
-)
+    @SerialName("balance_due_date") val balanceDueDate: String? = null,
+    val order: Order,
+    @SerialName("gifting_payments") val payments: List<GiftingPayment> = emptyList()
+) {
+    val amountPaid: Double get() = payments.sumOf { it.amount }
+    val balance: Double get() = (order.totalAmount - amountPaid).coerceAtLeast(0.0)
+    val isFullyPaid: Boolean get() = GiftingRules.isFullyPaid(amountPaid, order.totalAmount)
+}

@@ -3,12 +3,15 @@ package com.example.vishnu.repository
 import com.example.vishnu.model.CartRequest
 import com.example.vishnu.model.CartResponse
 import com.example.vishnu.model.GiftingOrderRequest
+import com.example.vishnu.model.GiftingPaymentRequest
 import com.example.vishnu.model.OrderItemRequest
 import com.example.vishnu.model.OrderRequest
 import com.example.vishnu.model.OrderResponse
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.query.Columns
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,6 +40,12 @@ interface OrderDataSource {
 
 interface GiftingOrderDataSource {
     suspend fun insertGiftingOrder(request: GiftingOrderRequest)
+
+    /** First payment on a new order (advance or full). */
+    suspend fun insertPayment(request: GiftingPaymentRequest)
+
+    /** Remaining balance, validated and recorded server-side (pay_gifting_balance). */
+    suspend fun payBalance(orderId: Long, razorpayPaymentId: String, amount: Double)
 }
 
 @Singleton
@@ -105,5 +114,20 @@ class SupabaseGiftingOrderDataSource @Inject constructor(
 
     override suspend fun insertGiftingOrder(request: GiftingOrderRequest) {
         postgrest["gifting_orders"].insert(request)
+    }
+
+    override suspend fun insertPayment(request: GiftingPaymentRequest) {
+        postgrest["gifting_payments"].insert(request)
+    }
+
+    override suspend fun payBalance(orderId: Long, razorpayPaymentId: String, amount: Double) {
+        postgrest.rpc(
+            "pay_gifting_balance",
+            buildJsonObject {
+                put("p_order_id", orderId)
+                put("p_razorpay_payment_id", razorpayPaymentId)
+                put("p_amount", amount)
+            }
+        )
     }
 }

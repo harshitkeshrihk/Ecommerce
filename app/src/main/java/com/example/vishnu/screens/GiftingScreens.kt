@@ -32,6 +32,8 @@ import com.example.vishnu.uicomponents.PackContentsEditor
 import com.example.vishnu.utils.formatRupees
 import com.example.vishnu.viewModels.GiftPackBuilderViewModel
 import com.example.vishnu.viewModels.GiftingHomeViewModel
+import com.example.vishnu.viewModels.PayChoice
+import com.example.vishnu.viewModels.PaymentPlan
 import com.example.vishnu.viewModels.ShipByCapacity
 import com.example.vishnu.viewModels.capacityConflictMessage
 import java.time.Instant
@@ -49,6 +51,7 @@ fun GiftingHomeScreen(
     onBack: () -> Unit,
     onPackClick: (packId: String) -> Unit,
     onBuildOwnClick: () -> Unit,
+    onMyOrdersClick: () -> Unit,
     viewModel: GiftingHomeViewModel = hiltViewModel()
 ) {
     val packs by viewModel.visiblePacks.collectAsState()
@@ -70,6 +73,9 @@ fun GiftingHomeScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                },
+                actions = {
+                    TextButton(onClick = onMyOrdersClick) { Text("My orders") }
                 }
             )
         }
@@ -192,6 +198,9 @@ fun GiftPackBuilderScreen(
     val address by viewModel.address.collectAsState()
     val total by viewModel.total.collectAsState()
     val shipByCapacity by viewModel.shipByCapacity.collectAsState()
+    val paymentPlan by viewModel.paymentPlan.collectAsState()
+    val payChoice by viewModel.payChoice.collectAsState()
+    val customPayText by viewModel.customPayText.collectAsState()
     val giftingProducts by viewModel.giftingProducts.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
@@ -231,8 +240,13 @@ fun GiftPackBuilderScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Total", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        Text(formatRupees(total), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Pay now", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(
+                            paymentPlan.payNow?.let(::formatRupees) ?: "—",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text("of ${formatRupees(total)} total", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
                     Button(onClick = { viewModel.checkout() }, enabled = !isProcessing && !isLoading) {
                         if (isProcessing) {
@@ -314,6 +328,15 @@ fun GiftPackBuilderScreen(
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            SectionTitle("6. Payment")
+            PaymentSection(
+                plan = paymentPlan,
+                choice = payChoice,
+                customText = customPayText,
+                onChoice = { viewModel.payChoice.value = it },
+                onCustomText = { viewModel.customPayText.value = it }
+            )
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -341,7 +364,66 @@ fun GiftPackBuilderScreen(
                 TextButton(onClick = { placedOrderId = null; onOrderPlaced() }) { Text("Done") }
             },
             title = { Text("Order placed") },
-            text = { Text("Your gifting order #$orderId is confirmed. You can track it under My Orders.") }
+            text = {
+                Text(
+                    "Your gifting order #$orderId is confirmed. " +
+                        "You can see what's paid and pay any balance under Bulk Gifting → My orders."
+                )
+            }
+        )
+    }
+}
+
+@Composable
+private fun PaymentSection(
+    plan: PaymentPlan,
+    choice: PayChoice,
+    customText: String,
+    onChoice: (PayChoice) -> Unit,
+    onCustomText: (String) -> Unit
+) {
+    if (plan.fullRequired) {
+        Text(
+            "The ship-by date is too close for a later balance payment, so the full " +
+                "${formatRupees(plan.total)} is due now.",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        return
+    }
+
+    @Composable
+    fun Option(value: PayChoice, title: String, subtitle: String) {
+        Row(
+            Modifier.fillMaxWidth().clickable { onChoice(value) }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(selected = choice == value, onClick = { onChoice(value) })
+            Column {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+        }
+    }
+
+    val balanceNote = plan.balanceDueDate
+        ?.let { "Balance due by ${it.format(displayDate)}" }
+        ?: "Balance due ${GiftingRules.BALANCE_DUE_DAYS_BEFORE_SHIP} days before the ship-by date"
+
+    Option(
+        PayChoice.MIN_ADVANCE,
+        "Pay ${GiftingRules.MIN_ADVANCE_PERCENT}% advance · ${formatRupees(plan.minAdvance)}",
+        balanceNote
+    )
+    Option(PayChoice.FULL, "Pay in full · ${formatRupees(plan.total)}", "Nothing left to pay later")
+    Option(PayChoice.CUSTOM, "Pay a different amount", "At least ${formatRupees(plan.minAdvance)}. $balanceNote")
+    if (choice == PayChoice.CUSTOM) {
+        OutlinedTextField(
+            value = customText,
+            onValueChange = { text -> onCustomText(text.filter { it.isDigit() || it == '.' }.take(10)) },
+            label = { Text("Amount to pay now (₹)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(start = 48.dp)
         )
     }
 }

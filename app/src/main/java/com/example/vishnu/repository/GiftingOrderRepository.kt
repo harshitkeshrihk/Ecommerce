@@ -3,6 +3,8 @@ package com.example.vishnu.repository
 import android.util.Log
 import com.example.vishnu.model.GiftPackDraft
 import com.example.vishnu.model.GiftingOrderRequest
+import com.example.vishnu.model.GiftingPaymentRequest
+import com.example.vishnu.model.GiftingRules
 import com.example.vishnu.model.OccasionType
 import com.example.vishnu.model.OrderItemRequest
 import com.example.vishnu.model.OrderRequest
@@ -19,11 +21,12 @@ sealed class GiftingOrderResult {
 }
 
 /**
- * Creates a gifting order after Razorpay has taken payment (same
- * pay-then-record order as retail checkout). Writes three things:
- * the parent `orders` row (channel = gifting), `order_items` with the
- * expanded quantities (qty per pack x pack count), and the `gifting_orders`
- * row holding the per-pack composition, personalization and ship-by date.
+ * Creates a gifting order after Razorpay has taken the first payment (same
+ * pay-then-record order as retail checkout). Writes four things:
+ * the parent `orders` row (channel = gifting; ADVANCE_PAID or PAID), `order_items`
+ * with the expanded quantities (qty per pack x pack count), the `gifting_orders`
+ * row holding the per-pack composition, personalization, ship-by and balance
+ * due dates, and the first `gifting_payments` row (advance or full).
  */
 @Singleton
 class GiftingOrderRepository @Inject constructor(
@@ -38,22 +41,26 @@ class GiftingOrderRepository @Inject constructor(
         personalization: String,
         shipByDate: LocalDate,
         address: String,
-        paymentId: String
+        paymentId: String,
+        amountPaid: Double
     ): GiftingOrderResult = withContext(Dispatchers.IO) {
         val userId = currentUser.userId()
             ?: return@withContext GiftingOrderResult.Failed("Not signed in")
         val storeId = draft.lines.firstOrNull()?.product?.storeId
             ?: return@withContext GiftingOrderResult.Failed("The pack is empty")
 
+        val total = draft.totalFor(packCount)
+        val paidInFull = GiftingRules.isFullyPaid(amountPaid, total)
+
         try {
             val orderId = orderDataSource.insertOrder(
                 OrderRequest(
                     userId = userId,
                     paymentId = paymentId,
-                    totalAmount = draft.totalFor(packCount),
+                    totalAmount = total,
                     address = address,
                     storeId = storeId,
-                    status = "PAID",
+                    status = if (paidInFull) "PAID" else "ADVANCE_PAID",
                     channel = "gifting"
                 )
             )
@@ -82,7 +89,17 @@ class GiftingOrderRepository @Inject constructor(
                         PackContentLine(it.product.id, it.product.name, it.qtyPerPack, it.product.priceRetail)
                     },
                     personalizationText = personalization.trim().ifBlank { null },
-                    shipByDate = shipByDate.toString()
+                    shipByDate = shipByDate.toString(),
+                    balanceDueDate = GiftingRules.balanceDueDate(shipByDate).toString()
+                )
+            )
+
+            giftingOrderDataSource.insertPayment(
+                GiftingPaymentRequest(
+                    orderId = orderId,
+                    razorpayPaymentId = paymentId,
+                    amount = amountPaid,
+                    kind = if (paidInFull) "full" else "advance"
                 )
             )
             GiftingOrderResult.Placed(orderId)
@@ -94,4 +111,23 @@ class GiftingOrderRepository @Inject constructor(
             )
         }
     }
+
+    /**
+     * Records the remaining balance after Razorpay has taken it. The server
+     * (pay_gifting_balance) checks the order is the caller's and that the
+     * amount matches what's left, then marks the order PAID.
+     */
+    suspend fun payBalance(orderId: Long, paymentId: String, amount: Double): GiftingOrderResult =
+        withContext(Dispatchers.IO) {
+            try {
+                giftingOrderDataSource.payBalance(orderId, paymentId, amount)
+                GiftingOrderResult.Placed(orderId)
+            } catch (e: Exception) {
+                Log.e("GiftingOrderRepo", "Failed to record balance payment $paymentId for order $orderId", e)
+                GiftingOrderResult.Failed(
+                    "Payment received (ID $paymentId) but it could not be recorded against order #$orderId. " +
+                        "Please contact us with this payment ID."
+                )
+            }
+        }
 }
