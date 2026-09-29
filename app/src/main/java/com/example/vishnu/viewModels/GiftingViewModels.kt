@@ -163,6 +163,10 @@ class GiftPackBuilderViewModel @Inject constructor(
     private val _budgetPerPerson = MutableStateFlow<Double?>(null)
     val budgetPerPerson = _budgetPerPerson.asStateFlow()
 
+    /** Corporate reorder: the past order being repeated (null for a new order). */
+    private val _reorderSource = MutableStateFlow<GiftingOrder?>(null)
+    val reorderSource = _reorderSource.asStateFlow()
+
     private val _draft = MutableStateFlow(GiftPackDraft(name = "Custom Gift Pack", sourcePackId = null, lines = emptyList()))
     val draft = _draft.asStateFlow()
 
@@ -214,10 +218,26 @@ class GiftPackBuilderViewModel @Inject constructor(
         }.flowOn(Dispatchers.Default) // up to a year of re-planning when searching for the earliest date
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ShipByCapacity.NotChecked)
 
+    // Declared after _draft: property initializers run top to bottom.
+    /**
+     * For a reorder: whether the original's approved proof will be reused
+     * (same logo, same products) — null when this isn't a reorder.
+     */
+    val proofWillCarryOver: StateFlow<Boolean?> =
+        combine(_reorderSource, _draft, logoUri) { source, draft, newLogo ->
+            source?.let {
+                GiftingRules.proofCarriesOver(
+                    it,
+                    newProductIds = draft.lines.map { line -> line.product.id }.toSet(),
+                    newLogoPath = if (newLogo == null) it.logoPath else null
+                )
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     sealed class BuilderEvent {
         data class LaunchPayment(val amount: Double, val email: String, val phone: String) : BuilderEvent()
         data class Message(val text: String) : BuilderEvent()
-        data class OrderPlaced(val orderId: Long) : BuilderEvent()
+        data class OrderPlaced(val orderId: Long, val proofCarriedOver: Boolean = false) : BuilderEvent()
     }
 
     private val _events = MutableSharedFlow<BuilderEvent>()
@@ -235,7 +255,8 @@ class GiftPackBuilderViewModel @Inject constructor(
         val occasion: OccasionType,
         val logoPath: String?,
         val logoNotes: String?,
-        val budgetPerPerson: Double?
+        val budgetPerPerson: Double?,
+        val reorderOf: Long?
     )
 
     private var pendingCheckout: PendingCheckout? = null
@@ -255,7 +276,8 @@ class GiftPackBuilderViewModel @Inject constructor(
         packId: String?,
         occasion: OccasionType? = null,
         packCount: Int? = null,
-        budgetPerPerson: Double? = null
+        budgetPerPerson: Double? = null,
+        reorderOf: Long? = null
     ) {
         if (loaded) return
         loaded = true
@@ -267,10 +289,34 @@ class GiftPackBuilderViewModel @Inject constructor(
             if (packId != null) {
                 giftPackRepository.getPack(packId)?.let { _draft.value = it.toDraft() }
             }
+            if (reorderOf != null) loadReorder(reorderOf)
             _giftingProducts.value = giftPackRepository.getGiftingProducts()
             address.value = profileRepository.getUserProfile()?.address.orEmpty()
             capacitySnapshot.value = loadCapacitySnapshot()
             _isLoading.value = false
+        }
+    }
+
+    /** Prefills everything from a past corporate order, at today's prices. */
+    private suspend fun loadReorder(orderId: Long) {
+        val source = giftPackRepository.getMyGiftingOrder(orderId)
+        if (source == null) {
+            _events.emit(BuilderEvent.Message("Couldn't load order #$orderId"))
+            return
+        }
+        val products = giftPackRepository.getAvailableProducts(source.packContents.map { it.productId })
+        val (draft, missing) = GiftingRules.reorderDraft(source, products)
+        _reorderSource.value = source
+        _draft.value = draft
+        occasion.value = OccasionType.CORPORATE
+        packCountText.value = source.packCount.toString()
+        _budgetPerPerson.value = source.budgetPerPerson
+        personalization.value = source.personalizationText.orEmpty()
+        logoNotes.value = source.logoNotes.orEmpty()
+        if (missing.isNotEmpty()) {
+            _events.emit(
+                BuilderEvent.Message("No longer available and removed: ${missing.joinToString()}. Add a replacement if needed.")
+            )
         }
     }
 
@@ -287,6 +333,8 @@ class GiftPackBuilderViewModel @Inject constructor(
     fun setQtyPerPack(productId: String, qty: Int) {
         _draft.value = _draft.value.copy(lines = _draft.value.lines.withQty(productId, qty))
     }
+
+    suspend fun imageUrl(path: String): String? = brandingRepository.signedUrl(path)
 
     fun rename(name: String) {
         _draft.value = _draft.value.copy(name = name)
@@ -310,11 +358,13 @@ class GiftPackBuilderViewModel @Inject constructor(
                 return@launch
             }
             val isCorporate = occasion.value == OccasionType.CORPORATE
-            if (isCorporate && logoUri.value == null) {
+            // A reorder may keep the original logo file instead of uploading one.
+            val reusedLogoPath = _reorderSource.value?.logoPath?.takeIf { isCorporate && logoUri.value == null }
+            if (isCorporate && logoUri.value == null && reusedLogoPath == null) {
                 _events.emit(BuilderEvent.Message("Upload your company logo for a corporate order"))
                 return@launch
             }
-            val logoImage = if (isCorporate) {
+            val logoImage = if (isCorporate && logoUri.value != null) {
                 readBrandImage(context, logoUri.value!!).getOrElse {
                     _events.emit(BuilderEvent.Message(it.message ?: "Couldn't read the logo"))
                     return@launch
@@ -349,7 +399,7 @@ class GiftPackBuilderViewModel @Inject constructor(
             }
 
             // Upload the logo before charging, so a paid order always has its logo.
-            val logoPath = logoImage?.let { image ->
+            val logoPath = reusedLogoPath ?: logoImage?.let { image ->
                 val userId = auth.currentUserOrNull()?.id
                 val path = userId?.let { brandingRepository.uploadLogo(it, image.bytes, image.extension) }
                 if (path == null) {
@@ -370,7 +420,8 @@ class GiftPackBuilderViewModel @Inject constructor(
                 occasion = occasion.value,
                 logoPath = logoPath,
                 logoNotes = if (isCorporate) logoNotes.value else null,
-                budgetPerPerson = if (isCorporate) _budgetPerPerson.value else null
+                budgetPerPerson = if (isCorporate) _budgetPerPerson.value else null,
+                reorderOf = _reorderSource.value?.orderId?.takeIf { isCorporate }
             )
 
             val user = auth.currentUserOrNull()
@@ -400,9 +451,11 @@ class GiftPackBuilderViewModel @Inject constructor(
                     amountPaid = checkout.amountNow,
                     logoPath = checkout.logoPath,
                     logoNotes = checkout.logoNotes,
-                    budgetPerPerson = checkout.budgetPerPerson
+                    budgetPerPerson = checkout.budgetPerPerson,
+                    reorderOf = checkout.reorderOf
                 )) {
-                    is GiftingOrderResult.Placed -> _events.emit(BuilderEvent.OrderPlaced(placed.orderId))
+                    is GiftingOrderResult.Placed ->
+                        _events.emit(BuilderEvent.OrderPlaced(placed.orderId, placed.proofCarriedOver))
                     is GiftingOrderResult.Failed -> _events.emit(BuilderEvent.Message(placed.message))
                 }
             }

@@ -285,4 +285,60 @@ class GiftingRulesTest {
         assertEquals("Minimum order is 10 people", GiftingRules.validateCorporateBrief(500.0, 9))
         assertNull(GiftingRules.validateCorporateBrief(500.0, 10))
     }
+
+    // --- Corporate reorder (slice 4c) ---
+
+    private val pastOrder = GiftingOrder(
+        orderId = 42, occasionType = "corporate", packName = "Diwali Hamper", packCount = 300,
+        packContents = listOf(
+            PackContentLine("bowl", "Product bowl", 1, 100.0),
+            PackContentLine("spoon", "Product spoon", 2, 25.0),
+            PackContentLine("box", "Product box", 1, 40.0)
+        ),
+        shipByDate = "2025-10-20",
+        order = Order(42, "2025-09-24T10:00:00", 57_000.0, "DELIVERED", "pay", "addr", "gifting", "user-9"),
+        logoPath = "user-9/logos/acme.png",
+        proofs = listOf(BrandAsset("p1", 42, 1, "user-9/proofs/42/v1.png", BrandAsset.APPROVED)),
+        budgetPerPerson = 200.0
+    )
+
+    @Test
+    fun `price per pack at order time uses the frozen unit prices`() {
+        assertEquals(190.0, pastOrder.pricePerPackAtOrder, 0.0) // 100 + 2x25 + 40
+    }
+
+    @Test
+    fun `reorder rebuilds the pack at today's prices with the same quantities`() {
+        val (draft, missing) = GiftingRules.reorderDraft(pastOrder, listOf(bowl, spoon, box))
+        assertTrue(missing.isEmpty())
+        assertEquals("Diwali Hamper", draft.name)
+        assertEquals(listOf("bowl" to 1, "spoon" to 2, "box" to 1), draft.lines.map { it.product.id to it.qtyPerPack })
+        assertEquals(230.0, draft.pricePerPack, 0.0) // today: 120 + 60 + 50, not the old 190
+    }
+
+    @Test
+    fun `reorder drops products that are no longer available and names them`() {
+        val (draft, missing) = GiftingRules.reorderDraft(pastOrder, listOf(bowl, box))
+        assertEquals(listOf("bowl", "box"), draft.lines.map { it.product.id })
+        assertEquals(listOf("Product spoon"), missing)
+    }
+
+    @Test
+    fun `approved proof carries over with the same logo and the same products`() {
+        assertTrue(GiftingRules.proofCarriesOver(pastOrder, setOf("bowl", "spoon", "box"), "user-9/logos/acme.png"))
+    }
+
+    @Test
+    fun `a new logo, or added or removed products, means a new proof`() {
+        assertFalse(GiftingRules.proofCarriesOver(pastOrder, setOf("bowl", "spoon", "box"), "user-9/logos/new.png"))
+        assertFalse(GiftingRules.proofCarriesOver(pastOrder, setOf("bowl", "spoon", "box"), null))
+        assertFalse(GiftingRules.proofCarriesOver(pastOrder, setOf("bowl", "box"), "user-9/logos/acme.png"))
+        assertFalse(GiftingRules.proofCarriesOver(pastOrder, setOf("bowl", "spoon", "box", "extra"), "user-9/logos/acme.png"))
+    }
+
+    @Test
+    fun `an order whose proof was never approved has nothing to carry over`() {
+        val unapproved = pastOrder.copy(proofs = listOf(BrandAsset("p1", 42, 1, "x.png", BrandAsset.REVISION_REQUESTED)))
+        assertFalse(GiftingRules.proofCarriesOver(unapproved, setOf("bowl", "spoon", "box"), "user-9/logos/acme.png"))
+    }
 }

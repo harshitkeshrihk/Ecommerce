@@ -208,4 +208,44 @@ class GiftingOrderRepositoryTest {
         )
         assertNull(giftingDb.rows.single().budgetPerPerson)
     }
+
+    // --- Corporate reorder (slice 4c) ---
+
+    private suspend fun placeReorder(reorderOf: Long?, occasion: OccasionType = OccasionType.CORPORATE) =
+        repo.placeGiftingOrder(
+            draft, occasion, 150, "", LocalDate.of(2026, 11, 1), "addr", "pay_r", 27_000.0,
+            logoPath = "user-1/logos/abc.png", reorderOf = reorderOf
+        )
+
+    @Test
+    fun `a reorder records which order it repeats and reports the carried-over proof`() = runTest {
+        val result = placeReorder(reorderOf = 42)
+
+        val newId = orderDb.orders.single().first
+        assertEquals(42L, giftingDb.rows.single().reorderOf)
+        assertEquals(listOf(newId to 42L), giftingDb.carryOverCalls)
+        assertEquals(GiftingOrderResult.Placed(newId, proofCarriedOver = true), result)
+    }
+
+    @Test
+    fun `when the server declines the carry-over the order still succeeds, needing a new proof`() = runTest {
+        giftingDb.carryOverResult = false
+        val result = placeReorder(reorderOf = 42)
+        assertEquals(false, (result as GiftingOrderResult.Placed).proofCarriedOver)
+    }
+
+    @Test
+    fun `a failing carry-over never fails the paid order`() = runTest {
+        giftingDb.failCarryOver = true
+        val result = placeReorder(reorderOf = 42)
+        assertTrue(result is GiftingOrderResult.Placed)
+        assertEquals(false, (result as GiftingOrderResult.Placed).proofCarriedOver)
+    }
+
+    @Test
+    fun `a new (non-reorder) order never attempts a carry-over`() = runTest {
+        placeReorder(reorderOf = null)
+        assertTrue(giftingDb.carryOverCalls.isEmpty())
+        assertNull(giftingDb.rows.single().reorderOf)
+    }
 }

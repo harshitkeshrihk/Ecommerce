@@ -63,6 +63,7 @@ fun GiftingPaymentLine(order: GiftingOrder) {
 fun MyGiftingOrdersScreen(
     onBack: () -> Unit,
     onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit,
+    onReorder: (orderId: Long) -> Unit,
     viewModel: MyGiftingOrdersViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -125,7 +126,8 @@ fun MyGiftingOrdersScreen(
                         onReplaceLogo = {
                             replaceLogoFor = order
                             logoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }
+                        },
+                        onReorder = { onReorder(order.orderId) }
                     )
                 }
             }
@@ -153,7 +155,8 @@ private fun MyGiftingOrderCard(
     resolveUrl: suspend (String) -> String?,
     onApproveProof: () -> Unit,
     onRequestChanges: () -> Unit,
-    onReplaceLogo: () -> Unit
+    onReplaceLogo: () -> Unit,
+    onReorder: () -> Unit
 ) {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -188,6 +191,11 @@ private fun MyGiftingOrderCard(
                     } else {
                         Text("Pay balance ${formatRupees(order.balance)}")
                     }
+                }
+            }
+            if (order.isCorporate) {
+                OutlinedButton(onClick = onReorder, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    Text("Reorder")
                 }
             }
         }

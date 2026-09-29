@@ -116,4 +116,15 @@ class FakeGiftingOrderDataSource : GiftingOrderDataSource {
         if (failBalance) error("Balance payment must be exactly the remaining amount")
         balancePayments += Triple(orderId, razorpayPaymentId, amount)
     }
+
+    /** What the server would answer; tests set it. Calls are recorded as (new, source). */
+    var carryOverResult = true
+    var failCarryOver = false
+    val carryOverCalls = mutableListOf<Pair<Long, Long>>()
+
+    override suspend fun carryOverProof(newOrderId: Long, sourceOrderId: Long): Boolean {
+        carryOverCalls += newOrderId to sourceOrderId
+        if (failCarryOver) error("rpc failed")
+        return carryOverResult
+    }
 }

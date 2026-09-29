@@ -135,6 +135,28 @@ object GiftingRules {
             .filter { it.items.isNotEmpty() && it.toDraft().pricePerPack <= budgetPerPerson + 0.005 }
             .sortedByDescending { it.toDraft().pricePerPack }
 
+    /**
+     * Rebuilds a past order's pack at TODAY's prices from the products that are
+     * still available. Returns the draft and the names of items that were dropped.
+     */
+    fun reorderDraft(source: GiftingOrder, availableProducts: List<Product>): Pair<GiftPackDraft, List<String>> {
+        val byId = availableProducts.associateBy { it.id }
+        val lines = source.packContents.mapNotNull { line -> byId[line.productId]?.let { GiftPackLine(it, line.qtyPerPack) } }
+        val missing = source.packContents.filter { it.productId !in byId }.map { it.productName }
+        return GiftPackDraft(name = source.packName, sourcePackId = null, lines = lines) to missing
+    }
+
+    /**
+     * Whether a reorder can reuse the source order's approved proof: same logo
+     * file and the same set of products (quantities may change). Mirrors the
+     * server-side check in carry_over_approved_proof().
+     */
+    fun proofCarriesOver(source: GiftingOrder, newProductIds: Set<String>, newLogoPath: String?): Boolean =
+        source.isCorporate &&
+            source.proofStatus == ProofStatus.APPROVED &&
+            newLogoPath != null && newLogoPath == source.logoPath &&
+            newProductIds == source.packContents.map { it.productId }.toSet()
+
     /** Validates the budget + headcount form; returns an error message or null. */
     fun validateCorporateBrief(budgetPerPerson: Double?, headcount: Int?): String? = when {
         budgetPerPerson == null || budgetPerPerson <= 0.0 -> "Enter a budget per person"
@@ -192,7 +214,8 @@ data class GiftingOrderRequest(
     @SerialName("balance_due_date") val balanceDueDate: String, // ISO yyyy-MM-dd
     @SerialName("logo_path") val logoPath: String?, // corporate only
     @SerialName("logo_notes") val logoNotes: String?,
-    @SerialName("budget_per_person") val budgetPerPerson: Double? // corporate, when ordered from a budget
+    @SerialName("budget_per_person") val budgetPerPerson: Double?, // corporate, when ordered from a budget
+    @SerialName("reorder_of") val reorderOf: Long? // corporate reorder: the order being repeated
 )
 
 @Serializable
@@ -226,8 +249,13 @@ data class GiftingOrder(
     @SerialName("gifting_payments") val payments: List<GiftingPayment> = emptyList(),
     @SerialName("logo_path") val logoPath: String? = null,
     @SerialName("logo_notes") val logoNotes: String? = null,
-    @SerialName("brand_assets") val proofs: List<BrandAsset> = emptyList()
+    @SerialName("brand_assets") val proofs: List<BrandAsset> = emptyList(),
+    @SerialName("budget_per_person") val budgetPerPerson: Double? = null,
+    @SerialName("reorder_of") val reorderOf: Long? = null
 ) {
+    /** Price per pack at the time of this order (unit prices were frozen on the order). */
+    val pricePerPackAtOrder: Double get() = packContents.sumOf { it.unitPrice * it.qtyPerPack }
+
     val isCorporate: Boolean get() = occasionType == OccasionType.CORPORATE.dbValue
 
     /** Newest proof version, if the team has uploaded any. */

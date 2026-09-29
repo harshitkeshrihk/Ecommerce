@@ -127,6 +127,38 @@ class GiftPackRepository @Inject constructor(
         }
     }
 
+    /** One of the caller's gifting orders (RLS limits it to their own), with payments and proofs. */
+    suspend fun getMyGiftingOrder(orderId: Long): GiftingOrder? = withContext(Dispatchers.IO) {
+        try {
+            postgrest["gifting_orders"]
+                .select(columns = Columns.raw("*, order:orders!inner(*), gifting_payments(*), brand_assets(*)")) {
+                    filter { eq("order_id", orderId) }
+                }
+                .decodeSingleOrNull<GiftingOrder>()
+        } catch (e: Exception) {
+            Log.e("GiftPackRepo", "Error fetching gifting order $orderId", e)
+            null
+        }
+    }
+
+    /** Current, still-available products for [ids] (today's prices). */
+    suspend fun getAvailableProducts(ids: Collection<String>): List<Product> = withContext(Dispatchers.IO) {
+        if (ids.isEmpty()) return@withContext emptyList()
+        try {
+            postgrest["products"]
+                .select {
+                    filter {
+                        isIn("id", ids.toList())
+                        eq("is_available", true)
+                    }
+                }
+                .decodeList<Product>()
+        } catch (e: Exception) {
+            Log.e("GiftPackRepo", "Error fetching products for reorder", e)
+            emptyList()
+        }
+    }
+
     /** The signed-in customer's own gifting orders, newest ship-by first. */
     suspend fun getMyGiftingOrders(userId: String): List<GiftingOrder> = withContext(Dispatchers.IO) {
         try {

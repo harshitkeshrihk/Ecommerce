@@ -46,6 +46,9 @@ interface GiftingOrderDataSource {
 
     /** Remaining balance, validated and recorded server-side (pay_gifting_balance). */
     suspend fun payBalance(orderId: Long, razorpayPaymentId: String, amount: Double)
+
+    /** Reuses the source order's approved proof if the server agrees it still applies. */
+    suspend fun carryOverProof(newOrderId: Long, sourceOrderId: Long): Boolean
 }
 
 @Singleton
@@ -130,4 +133,13 @@ class SupabaseGiftingOrderDataSource @Inject constructor(
             }
         )
     }
+
+    override suspend fun carryOverProof(newOrderId: Long, sourceOrderId: Long): Boolean =
+        postgrest.rpc(
+            "carry_over_approved_proof",
+            buildJsonObject {
+                put("p_new_order_id", newOrderId)
+                put("p_source_order_id", sourceOrderId)
+            }
+        ).decodeAs<Boolean>()
 }

@@ -16,7 +16,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed class GiftingOrderResult {
-    data class Placed(val orderId: Long) : GiftingOrderResult()
+    data class Placed(val orderId: Long, val proofCarriedOver: Boolean = false) : GiftingOrderResult()
     data class Failed(val message: String) : GiftingOrderResult()
 }
 
@@ -45,7 +45,8 @@ class GiftingOrderRepository @Inject constructor(
         amountPaid: Double,
         logoPath: String? = null,
         logoNotes: String? = null,
-        budgetPerPerson: Double? = null
+        budgetPerPerson: Double? = null,
+        reorderOf: Long? = null
     ): GiftingOrderResult = withContext(Dispatchers.IO) {
         if (occasion == OccasionType.CORPORATE && logoPath == null) {
             return@withContext GiftingOrderResult.Failed("Corporate orders need a logo")
@@ -99,7 +100,8 @@ class GiftingOrderRepository @Inject constructor(
                     balanceDueDate = GiftingRules.balanceDueDate(shipByDate).toString(),
                     logoPath = logoPath,
                     logoNotes = logoNotes?.trim()?.ifBlank { null },
-                    budgetPerPerson = budgetPerPerson.takeIf { occasion == OccasionType.CORPORATE }
+                    budgetPerPerson = budgetPerPerson.takeIf { occasion == OccasionType.CORPORATE },
+                    reorderOf = reorderOf.takeIf { occasion == OccasionType.CORPORATE }
                 )
             )
 
@@ -111,7 +113,16 @@ class GiftingOrderRepository @Inject constructor(
                     kind = if (paidInFull) "full" else "advance"
                 )
             )
-            GiftingOrderResult.Placed(orderId)
+
+            // Reorder: reuse the approved proof when logo + products are unchanged.
+            // Best effort — if it doesn't apply or fails, the order simply goes through proofing.
+            val carried = if (occasion == OccasionType.CORPORATE && reorderOf != null) {
+                runCatching { giftingOrderDataSource.carryOverProof(orderId, reorderOf) }
+                    .onFailure { Log.e("GiftingOrderRepo", "Proof carry-over failed for order $orderId", it) }
+                    .getOrDefault(false)
+            } else false
+
+            GiftingOrderResult.Placed(orderId, proofCarriedOver = carried)
         } catch (e: Exception) {
             Log.e("GiftingOrderRepo", "Failed to record gifting order for payment $paymentId", e)
             GiftingOrderResult.Failed(

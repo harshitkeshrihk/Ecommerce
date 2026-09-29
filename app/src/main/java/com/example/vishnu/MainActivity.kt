@@ -337,17 +337,19 @@ fun VishnuCrockeryApp(
             composable("my_gifting_orders") {
                 MyGiftingOrdersScreen(
                     onBack = { navController.popBackStack() },
-                    onInitiatePayment = onInitiatePayment
+                    onInitiatePayment = onInitiatePayment,
+                    onReorder = { orderId -> navController.navigate("gift_pack_builder?reorderOf=$orderId") }
                 )
             }
 
             composable(
-                route = "gift_pack_builder?packId={packId}&occasion={occasion}&packs={packs}&budget={budget}",
+                route = "gift_pack_builder?packId={packId}&occasion={occasion}&packs={packs}&budget={budget}&reorderOf={reorderOf}",
                 arguments = listOf(
                     navArgument("packId") { nullable = true },
                     navArgument("occasion") { nullable = true },
                     navArgument("packs") { nullable = true },
-                    navArgument("budget") { nullable = true }
+                    navArgument("budget") { nullable = true },
+                    navArgument("reorderOf") { nullable = true }
                 )
             ) { backStackEntry ->
                 val args = backStackEntry.arguments
@@ -357,6 +359,7 @@ fun VishnuCrockeryApp(
                         ?.let { name -> OccasionType.entries.firstOrNull { it.name == name } },
                     initialPackCount = args?.getString("packs")?.toIntOrNull(),
                     budgetPerPerson = args?.getString("budget")?.toDoubleOrNull(),
+                    reorderOf = args?.getString("reorderOf")?.toLongOrNull(),
                     onBack = { navController.popBackStack() },
                     onInitiatePayment = onInitiatePayment,
                     onOrderPlaced = { navController.popBackStack("gifting_home", inclusive = false) }

@@ -36,6 +36,7 @@ import com.example.vishnu.model.GiftPack
 import com.example.vishnu.model.GiftingRules
 import com.example.vishnu.model.OccasionType
 import com.example.vishnu.uicomponents.GiftProductPickerDialog
+import com.example.vishnu.uicomponents.PrivateImage
 import com.example.vishnu.uicomponents.PackContentsEditor
 import com.example.vishnu.utils.formatRupees
 import com.example.vishnu.viewModels.GiftPackBuilderViewModel
@@ -217,6 +218,7 @@ fun GiftPackBuilderScreen(
     initialOccasion: OccasionType? = null,
     initialPackCount: Int? = null,
     budgetPerPerson: Double? = null,
+    reorderOf: Long? = null,
     onBack: () -> Unit,
     onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit,
     onOrderPlaced: () -> Unit,
@@ -246,8 +248,13 @@ fun GiftPackBuilderScreen(
     var showPicker by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var placedOrderId by remember { mutableStateOf<Long?>(null) }
+    var placedWithCarriedProof by remember { mutableStateOf(false) }
+    val reorderSource by viewModel.reorderSource.collectAsState()
+    val proofWillCarryOver by viewModel.proofWillCarryOver.collectAsState()
 
-    LaunchedEffect(packId) { viewModel.load(packId, initialOccasion, initialPackCount, budgetPerPerson) }
+    LaunchedEffect(packId, reorderOf) {
+        viewModel.load(packId, initialOccasion, initialPackCount, budgetPerPerson, reorderOf)
+    }
     val budget by viewModel.budgetPerPerson.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -257,8 +264,10 @@ fun GiftPackBuilderScreen(
                     onInitiatePayment(event.amount, event.email, event.phone)
                 is GiftPackBuilderViewModel.BuilderEvent.Message ->
                     Toast.makeText(context, event.text, Toast.LENGTH_LONG).show()
-                is GiftPackBuilderViewModel.BuilderEvent.OrderPlaced ->
+                is GiftPackBuilderViewModel.BuilderEvent.OrderPlaced -> {
+                    placedWithCarriedProof = event.proofCarriedOver
                     placedOrderId = event.orderId
+                }
             }
         }
     }
@@ -266,7 +275,15 @@ fun GiftPackBuilderScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (packId == null) "Build your pack" else "Customize pack") },
+                title = {
+                    Text(
+                        when {
+                            reorderOf != null -> "Reorder #$reorderOf"
+                            packId == null -> "Build your pack"
+                            else -> "Customize pack"
+                        }
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 }
@@ -311,6 +328,10 @@ fun GiftPackBuilderScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            reorderSource?.let { source ->
+                ReorderBanner(source.orderId, source.pricePerPackAtOrder, draft.pricePerPack)
+                Spacer(Modifier.height(16.dp))
+            }
             Text("Occasion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -327,6 +348,10 @@ fun GiftPackBuilderScreen(
                 Spacer(Modifier.height(16.dp))
                 CorporateLogoSection(
                     logoUri = logoUri,
+                    reusedLogoPath = reorderSource?.logoPath?.takeIf { logoUri == null },
+                    reusedFromOrderId = reorderSource?.orderId,
+                    proofWillCarryOver = proofWillCarryOver,
+                    resolveUrl = viewModel::imageUrl,
                     notes = logoNotes,
                     onPick = {
                         logoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -444,6 +469,7 @@ fun GiftPackBuilderScreen(
             text = {
                 Text(
                     "Your gifting order #$orderId is confirmed. " +
+                        (if (placedWithCarriedProof) "Your approved logo proof was reused, so it can go straight into production. " else "") +
                         "You can see what's paid and pay any balance under Bulk Gifting → My orders."
                 )
             }
@@ -452,8 +478,32 @@ fun GiftPackBuilderScreen(
 }
 
 @Composable
+private fun ReorderBanner(sourceOrderId: Long, lastPricePerPack: Double, todayPricePerPack: Double) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Repeating order #$sourceOrderId", fontWeight = FontWeight.Bold)
+            Text(
+                "Same items, headcount and logo as last time — at today's prices. Pick a new ship-by date below.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (kotlin.math.abs(todayPricePerPack - lastPricePerPack) > 0.005) {
+                Text(
+                    "Price per pack: ${formatRupees(lastPricePerPack)} last time → ${formatRupees(todayPricePerPack)} today",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CorporateLogoSection(
     logoUri: android.net.Uri?,
+    reusedLogoPath: String?,
+    reusedFromOrderId: Long?,
+    proofWillCarryOver: Boolean?,
+    resolveUrl: suspend (String) -> String?,
     notes: String,
     onPick: () -> Unit,
     onNotesChange: (String) -> Unit
@@ -475,10 +525,37 @@ private fun CorporateLogoSection(
                         modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp))
                     )
                     Spacer(Modifier.width(12.dp))
+                } else if (reusedLogoPath != null) {
+                    PrivateImage(reusedLogoPath, resolveUrl, Modifier.size(64.dp))
+                    Spacer(Modifier.width(12.dp))
                 }
                 OutlinedButton(onClick = onPick) {
-                    Text(if (logoUri == null) "Upload logo (PNG / JPG)" else "Change logo")
+                    Text(
+                        when {
+                            logoUri != null -> "Change logo"
+                            reusedLogoPath != null -> "Use a different logo"
+                            else -> "Upload logo (PNG / JPG)"
+                        }
+                    )
                 }
+            }
+            if (logoUri == null && reusedLogoPath != null) {
+                Text("Using your logo from order #$reusedFromOrderId", style = MaterialTheme.typography.bodySmall)
+            }
+            when (proofWillCarryOver) {
+                true -> Text(
+                    "✓ Your approved logo proof will be reused — no new approval needed.",
+                    color = Color(0xFF2E7D32),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                false -> Text(
+                    "Our team will send a new logo proof for your approval before production " +
+                        "(proofs are reused only when the logo and items are unchanged and were approved last time).",
+                    color = Color(0xFFEF6C00),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                null -> Unit
             }
             OutlinedTextField(
                 value = notes,
