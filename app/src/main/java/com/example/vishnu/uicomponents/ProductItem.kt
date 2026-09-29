@@ -1,30 +1,33 @@
 package com.example.vishnu.uicomponents
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.outlined.AddShoppingCart
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.vishnu.model.Product
-
-// ... imports (same as before)
 
 @Composable
 fun ProductItem(
@@ -32,142 +35,143 @@ fun ProductItem(
     onProductClick: (String) -> Unit,
     onAddToCart: (Product) -> Unit
 ) {
-    Card(
+    // Visual-only for now — there is no saved-items feature behind it yet.
+    var isSaved by rememberSaveable(product.id) { mutableStateOf(false) }
+    val inStock = product.isAvailable && product.stockCount != 0
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
-            .clickable { onProductClick(product.id) },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+            .padding(horizontal = 6.dp, vertical = 8.dp)
+            .clickable { onProductClick(product.id) }
     ) {
-        Column {
-            // IMAGE BOX
-            Box(modifier = Modifier.height(150.dp)) {
-                AsyncImage(
-                    model = product.imageUrl,
-                    contentDescription = product.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
+        // IMAGE
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.92f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            AsyncImage(
+                model = product.imageUrl,
+                contentDescription = product.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
 
-                // Out of Stock Overlay
-                if (!product.isAvailable || product.stockCount == 0) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.6f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "OUT OF STOCK",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                }
-
-                // Video Indicator
-                if (product.videoUrl != null) {
-                    Icon(
-                        imageVector = Icons.Default.PlayCircle,
-                        contentDescription = "Has Video",
-                        tint = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(28.dp)
-                    )
-                }
-
-                // Bestseller Badge
-                if (product.isBestseller) {
+            if (!inStock) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = "BESTSELLER",
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "OUT OF STOCK",
                         color = Color.White,
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .background(Color(0xFFD32F2F), RoundedCornerShape(topEnd = 8.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                        style = MaterialTheme.typography.labelMedium,
+                        letterSpacing = 1.sp
                     )
                 }
             }
 
-            // DETAILS
-            Column(modifier = Modifier.padding(12.dp)) {
+            if (product.isBestseller) {
                 Text(
-                    text = product.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    text = "BEST SELLER",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.8.sp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp)
+                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
+            }
 
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // The "Expert" Specs Row: Gauge + Weight
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Badge 1: Gauge
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        product?.gauge?.let {
-                            Text(
-                                text = it,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    // Badge 2: Weight (Important!)
-                    product.weight?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
-                    }
+            Surface(
+                onClick = { isSaved = !isSaved },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                shadowElevation = 1.dp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(32.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (isSaved) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = if (isSaved) "Saved" else "Save",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
+            }
 
-                Spacer(modifier = Modifier.height(8.dp))
+            if (product.videoUrl != null) {
+                Icon(
+                    imageVector = Icons.Default.PlayCircle,
+                    contentDescription = "Has Video",
+                    tint = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(26.dp)
+                )
+            }
+        }
 
-                // Price Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "₹${product.priceRetail.toInt()}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        // Wholesale Teaser (Optional: Only show if user is 'Business')
-                        // Text("Bulk: ₹${product.priceWholesale.toInt()}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    }
+        Spacer(Modifier.height(10.dp))
 
-                    // Quick Add Button
-                    FilledIconButton(
-                        onClick = {
-                          onAddToCart(product)
-                        },
-                        modifier = Modifier.size(32.dp),
-                        enabled = product.isAvailable
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AddShoppingCart,
-                            contentDescription = "Add",
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
+        Text(
+            text = product.name,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        // Specs: gauge · weight
+        val specs = listOfNotNull(product.gauge, product.weight).joinToString(" · ")
+        if (specs.isNotEmpty()) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = specs,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "₹${product.priceRetail.toInt()}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedIconButton(
+                onClick = { onAddToCart(product) },
+                modifier = Modifier.size(32.dp),
+                enabled = product.isAvailable,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AddShoppingCart,
+                    contentDescription = "Add",
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }

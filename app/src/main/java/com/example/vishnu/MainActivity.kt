@@ -6,16 +6,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
@@ -83,11 +83,21 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 //        enableEdgeToEdge()
         setContent {
             VishnuTheme(dynamicColor=false) {
-                VishnuCrockeryApp(
-                    onInitiatePayment = { amount, email, phone ->
-                        startPayment(amount, email, phone)
-                    }
-                )
+                // targetSdk 35 forces edge-to-edge on Android 15+. Keep every screen inside
+                // the status bar / navigation bar (and camera cutout); the padding consumes
+                // those insets so screens that pad themselves don't double up.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
+                ) {
+                    VishnuCrockeryApp(
+                        onInitiatePayment = { amount, email, phone ->
+                            startPayment(amount, email, phone)
+                        }
+                    )
+                }
             }
         }
     }
@@ -177,33 +187,21 @@ fun VishnuCrockeryApp(
             }
             // Screen 1: Catalog
             composable("catalog") {
-                Scaffold(
-                    floatingActionButton = {
-                        FloatingActionButton(
-                            onClick = { navController.navigate("cart") },
-                            containerColor = MaterialTheme.colorScheme.primary
-                        ) {
-                            Icon(Icons.Default.ShoppingCart, contentDescription = "Go to Cart")
-                        }
+                // Cart is reached from the header cart icon and the bottom bar.
+                CatalogScreen(
+                    onProductClick = { productId ->
+                        navController.navigate("detail/$productId")
+                    },
+                    onProfileClick = {
+                        navController.navigate("profile")
+                    },
+                    onGiftingClick = {
+                        navController.navigate("gifting_home")
+                    },
+                    onCartClick = {
+                        navController.navigate("cart")
                     }
-                ) { padding ->
-                    // Pass padding to CatalogScreen or handle it
-                    Box(modifier = Modifier.padding(padding)) {
-                        CatalogScreen(
-                            onProductClick = { productId ->
-                                navController.navigate("detail/$productId")
-                            },
-                            onProfileClick = {
-                                navController.navigate("profile")
-                            },
-                            onGiftingClick = {
-                                navController.navigate("gifting_home")
-                            }
-                        )
-                    }
-                }
-                // Note: You need to update your CatalogScreen to accept a click callback!
-                // See the instruction below 👇
+                )
             }
 
             // Screen 2: Detail

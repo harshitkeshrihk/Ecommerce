@@ -5,6 +5,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import com.example.vishnu.uicomponents.BrandTopBar
+import com.example.vishnu.uicomponents.StoreSection
+import com.example.vishnu.uicomponents.StoreSectionTabs
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -69,103 +82,104 @@ fun GiftingHomeScreen(
     val isLoading by viewModel.isLoading.collectAsState()
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Bulk Gifting")
-                        Text(
-                            "Return gifts for weddings, functions & festivals",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-                actions = {
-                    TextButton(onClick = onMyOrdersClick) { Text("My orders") }
-                }
+            BrandTopBar(
+                navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                navigationDescription = "Back",
+                onNavigationClick = onBack,
+                actionIcon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                actionDescription = "My orders",
+                onActionClick = onMyOrdersClick
             )
         }
     ) { padding ->
-        LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(150.dp),
+            modifier = Modifier.padding(padding).fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onBuildOwnClick() },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Build your own pack", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Choose any items from the gifting collection",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                StoreSectionTabs(
+                    selected = StoreSection.GIFTING,
+                    onSectionClick = { section ->
+                        when (section) {
+                            StoreSection.ALL -> onBack()
+                            // Gifting is this screen; Wholesale / Corporate UI is not designed yet.
+                            StoreSection.GIFTING, StoreSection.WHOLESALE, StoreSection.CORPORATE -> Unit
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null)
                     }
-                }
+                )
             }
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onCorporateClick() },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Business, contentDescription = null)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Corporate gifting", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Enter a budget per person and get gift options with your logo",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null)
-                    }
-                }
-            }
-            item {
-                Text("Ready-made packs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = selectedTier == null,
-                        onClick = { viewModel.selectTier(null) },
-                        label = { Text("All budgets") }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(Modifier.padding(top = 4.dp)) {
+                    Text(
+                        "Bulk Gifting",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onBackground
                     )
-                    GiftingRules.BUDGET_TIERS.forEach { tier ->
-                        FilterChip(
-                            selected = selectedTier == tier,
-                            onClick = { viewModel.selectTier(tier) },
-                            label = { Text(tier.label) }
+                    Text(
+                        "Return gifts for weddings, functions & festivals",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                GiftingOptionCard(
+                    icon = Icons.Outlined.AutoAwesome,
+                    title = "Build your own pack",
+                    subtitle = "Choose any items from the gifting collection",
+                    onClick = onBuildOwnClick
+                )
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                GiftingOptionCard(
+                    icon = Icons.Outlined.Business,
+                    title = "Corporate gifting",
+                    subtitle = "Enter a budget per person and get gift options with your logo",
+                    onClick = onCorporateClick
+                )
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(Modifier.padding(top = 4.dp)) {
+                    Text(
+                        "Ready-made Packs",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        BudgetChip(
+                            label = "All budgets",
+                            selected = selectedTier == null,
+                            onClick = { viewModel.selectTier(null) }
                         )
+                        GiftingRules.BUDGET_TIERS.forEach { tier ->
+                            BudgetChip(
+                                label = tier.label,
+                                selected = selectedTier == tier,
+                                onClick = { viewModel.selectTier(tier) }
+                            )
+                        }
                     }
                 }
             }
             when {
-                isLoading -> item {
+                isLoading -> item(span = { GridItemSpan(maxLineSpan) }) {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 }
-                packs.isEmpty() -> item {
+                packs.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         "No ready-made packs in this budget yet — try building your own.",
-                        color = Color.Gray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 16.dp)
                     )
                 }
@@ -178,29 +192,108 @@ fun GiftingHomeScreen(
 }
 
 @Composable
-private fun GiftPackCard(pack: GiftPack, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+private fun GiftingOptionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(1.dp)
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(pack.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp))
                 Text(
-                    "${formatRupees(pack.toDraft().pricePerPack)} / pack",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            pack.description?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                pack.items.joinToString(" · ") { "${it.qty} × ${it.product.name}" },
-                style = MaterialTheme.typography.bodySmall
+            Icon(Icons.Default.ChevronRight, contentDescription = null)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BudgetChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, fontWeight = FontWeight.Medium) },
+        shape = RoundedCornerShape(8.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+            labelColor = MaterialTheme.colorScheme.onBackground,
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            selectedBorderColor = Color.Transparent,
+            borderWidth = 1.dp
+        )
+    )
+}
+
+@Composable
+private fun GiftPackCard(pack: GiftPack, onClick: () -> Unit) {
+    val imageUrl = pack.imageUrl ?: pack.items.firstOrNull()?.product?.imageUrl
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = pack.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1.2f)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             )
+            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Text(
+                    pack.name,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 17.sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    pack.items.joinToString(" · ") { "${it.qty} × ${it.product.name}" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        formatRupees(pack.toDraft().pricePerPack),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        " / pack",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    )
+                }
+            }
         }
     }
 }
