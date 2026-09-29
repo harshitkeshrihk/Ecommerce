@@ -244,4 +244,45 @@ class GiftingRulesTest {
         assertEquals(ProofStatus.APPROVED, order.proofStatus)
         assertTrue(order.canEnterProduction)
     }
+
+    // --- Corporate budget proposal (slice 4b) ---
+
+    private fun pack(id: String, vararg lines: Pair<Product, Int>) =
+        GiftPack(id = id, name = id, items = lines.mapIndexed { i, (p, q) -> GiftPackItem("$id-$i", q, p) })
+
+    private val budgetPacks = listOf(
+        pack("basic", bowl to 1, box to 1),              // 170
+        pack("standard", bowl to 1, spoon to 2, box to 1), // 230
+        pack("premium", bowl to 3, box to 1),            // 410
+        pack("empty")                                    // no items - never proposed
+    )
+
+    @Test
+    fun `proposal lists only packs within budget, closest to the budget first`() {
+        val proposed = GiftingRules.proposePacks(budgetPacks, budgetPerPerson = 250.0)
+        assertEquals(listOf("standard", "basic"), proposed.map { it.id })
+    }
+
+    @Test
+    fun `a pack priced exactly at the budget is included`() {
+        assertEquals(listOf("standard", "basic"), GiftingRules.proposePacks(budgetPacks, 230.0).map { it.id })
+    }
+
+    @Test
+    fun `nothing fits a budget below the cheapest pack`() {
+        assertTrue(GiftingRules.proposePacks(budgetPacks, 100.0).isEmpty())
+    }
+
+    @Test
+    fun `packs with no items are never proposed`() {
+        assertFalse(GiftingRules.proposePacks(budgetPacks, 10_000.0).any { it.id == "empty" })
+    }
+
+    @Test
+    fun `corporate brief needs a positive budget and at least the minimum headcount`() {
+        assertEquals("Enter a budget per person", GiftingRules.validateCorporateBrief(null, 50))
+        assertEquals("Enter a budget per person", GiftingRules.validateCorporateBrief(0.0, 50))
+        assertEquals("Minimum order is 10 people", GiftingRules.validateCorporateBrief(500.0, 9))
+        assertNull(GiftingRules.validateCorporateBrief(500.0, 10))
+    }
 }

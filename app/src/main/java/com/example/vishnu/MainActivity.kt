@@ -38,6 +38,9 @@ import com.example.vishnu.screens.AdminGiftPacksScreen
 import com.example.vishnu.screens.AdminGiftingOrdersScreen
 import com.example.vishnu.screens.GiftPackBuilderScreen
 import com.example.vishnu.screens.GiftingHomeScreen
+import com.example.vishnu.screens.AdminProposalRequestsScreen
+import com.example.vishnu.screens.CorporateGiftingScreen
+import com.example.vishnu.model.OccasionType
 import com.example.vishnu.screens.MyGiftingOrdersScreen
 import com.example.vishnu.screens.AdminQuotePipelineScreen
 import com.example.vishnu.screens.AuthScreen
@@ -314,7 +317,20 @@ fun VishnuCrockeryApp(
                     onBack = { navController.popBackStack() },
                     onPackClick = { packId -> navController.navigate("gift_pack_builder?packId=$packId") },
                     onBuildOwnClick = { navController.navigate("gift_pack_builder") },
-                    onMyOrdersClick = { navController.navigate("my_gifting_orders") }
+                    onMyOrdersClick = { navController.navigate("my_gifting_orders") },
+                    onCorporateClick = { navController.navigate("corporate_gifting") }
+                )
+            }
+
+            composable("corporate_gifting") {
+                CorporateGiftingScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenPack = { packId, headcount, budget ->
+                        navController.navigate(
+                            "gift_pack_builder?packId=$packId&occasion=${OccasionType.CORPORATE.name}" +
+                                "&packs=$headcount&budget=$budget"
+                        )
+                    }
                 )
             }
 
@@ -326,11 +342,21 @@ fun VishnuCrockeryApp(
             }
 
             composable(
-                route = "gift_pack_builder?packId={packId}",
-                arguments = listOf(navArgument("packId") { nullable = true })
+                route = "gift_pack_builder?packId={packId}&occasion={occasion}&packs={packs}&budget={budget}",
+                arguments = listOf(
+                    navArgument("packId") { nullable = true },
+                    navArgument("occasion") { nullable = true },
+                    navArgument("packs") { nullable = true },
+                    navArgument("budget") { nullable = true }
+                )
             ) { backStackEntry ->
+                val args = backStackEntry.arguments
                 GiftPackBuilderScreen(
-                    packId = backStackEntry.arguments?.getString("packId"),
+                    packId = args?.getString("packId"),
+                    initialOccasion = args?.getString("occasion")
+                        ?.let { name -> OccasionType.entries.firstOrNull { it.name == name } },
+                    initialPackCount = args?.getString("packs")?.toIntOrNull(),
+                    budgetPerPerson = args?.getString("budget")?.toDoubleOrNull(),
                     onBack = { navController.popBackStack() },
                     onInitiatePayment = onInitiatePayment,
                     onOrderPlaced = { navController.popBackStack("gifting_home", inclusive = false) }
@@ -351,7 +377,8 @@ fun VishnuCrockeryApp(
                             )
                         },
                         onGiftingOrdersClick = { navController.navigate("admin_gifting_orders") },
-                        onProductionCalendarClick = { navController.navigate("admin_production_calendar") }
+                        onProductionCalendarClick = { navController.navigate("admin_production_calendar") },
+                        onProposalRequestsClick = { navController.navigate("admin_proposal_requests") }
                     )
                 }
             }
@@ -381,6 +408,19 @@ fun VishnuCrockeryApp(
                     }
                 } else {
                     AdminGiftingOrdersScreen(onBack = { navController.popBackStack() })
+                }
+            }
+
+            composable("admin_proposal_requests") {
+                if (role != UserRole.ADMIN) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate("catalog") { popUpTo("admin_proposal_requests") { inclusive = true } }
+                    }
+                } else {
+                    AdminProposalRequestsScreen(
+                        onBack = { navController.popBackStack() },
+                        onCreatePack = { navController.navigate("admin_gift_pack_edit") }
+                    )
                 }
             }
 

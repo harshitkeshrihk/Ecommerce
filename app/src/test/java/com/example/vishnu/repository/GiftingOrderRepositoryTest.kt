@@ -188,4 +188,24 @@ class GiftingOrderRepositoryTest {
         place()
         assertNull(giftingDb.rows.single().logoPath)
     }
+
+    // --- Corporate budget (slice 4b) ---
+
+    @Test
+    fun `corporate orders remember the budget per person they were ordered against`() = runTest {
+        repo.placeGiftingOrder(
+            draft, OccasionType.CORPORATE, 150, "", LocalDate.of(2026, 11, 1), "addr", "pay_c", 27_000.0,
+            logoPath = "user-1/logos/abc.png", budgetPerPerson = 200.0
+        )
+        assertEquals(200.0, giftingDb.rows.single().budgetPerPerson)
+    }
+
+    @Test
+    fun `a budget is never stored on non-corporate orders`() = runTest {
+        repo.placeGiftingOrder(
+            draft, OccasionType.WEDDING, 150, "", LocalDate.of(2026, 11, 1), "addr", "pay_w", 27_000.0,
+            budgetPerPerson = 200.0
+        )
+        assertNull(giftingDb.rows.single().budgetPerPerson)
+    }
 }

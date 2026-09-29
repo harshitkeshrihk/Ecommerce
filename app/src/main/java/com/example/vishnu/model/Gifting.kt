@@ -126,6 +126,22 @@ object GiftingRules {
         else -> null
     }
 
+    /**
+     * Automatic corporate proposal: sellable packs whose price per pack fits the
+     * budget per person, closest to the budget first (best use of the budget).
+     */
+    fun proposePacks(packs: List<GiftPack>, budgetPerPerson: Double): List<GiftPack> =
+        packs
+            .filter { it.items.isNotEmpty() && it.toDraft().pricePerPack <= budgetPerPerson + 0.005 }
+            .sortedByDescending { it.toDraft().pricePerPack }
+
+    /** Validates the budget + headcount form; returns an error message or null. */
+    fun validateCorporateBrief(budgetPerPerson: Double?, headcount: Int?): String? = when {
+        budgetPerPerson == null || budgetPerPerson <= 0.0 -> "Enter a budget per person"
+        headcount == null || headcount < MIN_PACK_COUNT -> "Minimum order is $MIN_PACK_COUNT people"
+        else -> null
+    }
+
     val BUDGET_TIERS = listOf(
         BudgetTier("Under ₹300", 0.0, 300.0),
         BudgetTier("₹300 – ₹700", 300.0, 700.0),
@@ -175,7 +191,8 @@ data class GiftingOrderRequest(
     @SerialName("ship_by_date") val shipByDate: String, // ISO yyyy-MM-dd
     @SerialName("balance_due_date") val balanceDueDate: String, // ISO yyyy-MM-dd
     @SerialName("logo_path") val logoPath: String?, // corporate only
-    @SerialName("logo_notes") val logoNotes: String?
+    @SerialName("logo_notes") val logoNotes: String?,
+    @SerialName("budget_per_person") val budgetPerPerson: Double? // corporate, when ordered from a budget
 )
 
 @Serializable
@@ -268,4 +285,41 @@ data class BrandAssetRequest(
     val version: Int,
     @SerialName("proof_path") val proofPath: String,
     @SerialName("admin_note") val adminNote: String?
+)
+
+// --- Corporate custom proposal requests ---
+
+@Serializable
+data class CorporateProposalRequest(
+    val id: String,
+    @SerialName("budget_per_person") val budgetPerPerson: Double,
+    val headcount: Int,
+    val notes: String,
+    val status: String, // open | proposed | closed
+    @SerialName("proposed_pack_id") val proposedPackId: String? = null,
+    @SerialName("admin_note") val adminNote: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("responded_at") val respondedAt: String? = null
+) {
+    companion object {
+        const val OPEN = "open"
+        const val PROPOSED = "proposed"
+        const val CLOSED = "closed"
+    }
+}
+
+@Serializable
+data class CorporateProposalRequestInsert(
+    @SerialName("budget_per_person") val budgetPerPerson: Double,
+    val headcount: Int,
+    val notes: String
+)
+
+// status has no default on purpose (SupabaseModule's Json drops default-valued fields).
+@Serializable
+data class CorporateProposalResponse(
+    val status: String,
+    @SerialName("proposed_pack_id") val proposedPackId: String?,
+    @SerialName("admin_note") val adminNote: String?,
+    @SerialName("responded_at") val respondedAt: String
 )

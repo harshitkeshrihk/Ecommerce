@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -59,6 +60,7 @@ fun GiftingHomeScreen(
     onPackClick: (packId: String) -> Unit,
     onBuildOwnClick: () -> Unit,
     onMyOrdersClick: () -> Unit,
+    onCorporateClick: () -> Unit,
     viewModel: GiftingHomeViewModel = hiltViewModel()
 ) {
     val packs by viewModel.visiblePacks.collectAsState()
@@ -105,6 +107,26 @@ fun GiftingHomeScreen(
                             Text("Build your own pack", fontWeight = FontWeight.SemiBold)
                             Text(
                                 "Choose any items from the gifting collection",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null)
+                    }
+                }
+            }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { onCorporateClick() },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Business, contentDescription = null)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Corporate gifting", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Enter a budget per person and get gift options with your logo",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -192,6 +214,9 @@ private val displayDate = DateTimeFormatter.ofPattern("dd MMM yyyy")
 @Composable
 fun GiftPackBuilderScreen(
     packId: String?,
+    initialOccasion: OccasionType? = null,
+    initialPackCount: Int? = null,
+    budgetPerPerson: Double? = null,
     onBack: () -> Unit,
     onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit,
     onOrderPlaced: () -> Unit,
@@ -222,7 +247,8 @@ fun GiftPackBuilderScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var placedOrderId by remember { mutableStateOf<Long?>(null) }
 
-    LaunchedEffect(packId) { viewModel.load(packId) }
+    LaunchedEffect(packId) { viewModel.load(packId, initialOccasion, initialPackCount, budgetPerPerson) }
+    val budget by viewModel.budgetPerPerson.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -326,6 +352,15 @@ fun GiftPackBuilderScreen(
                 "Price per pack: ${formatRupees(draft.pricePerPack)}",
                 fontWeight = FontWeight.SemiBold
             )
+            budget?.takeIf { occasion == OccasionType.CORPORATE }?.let { perPerson ->
+                val delta = perPerson - draft.pricePerPack
+                Text(
+                    "Budget ${formatRupees(perPerson)} per person · " +
+                        if (delta >= -0.005) "${formatRupees(delta)} under budget" else "${formatRupees(-delta)} over budget",
+                    color = if (delta >= -0.005) Color(0xFF2E7D32) else Color(0xFFEF6C00),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
 
             SectionTitle("2. How many packs")
             OutlinedTextField(

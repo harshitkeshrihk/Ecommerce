@@ -44,7 +44,8 @@ class GiftingOrderRepository @Inject constructor(
         paymentId: String,
         amountPaid: Double,
         logoPath: String? = null,
-        logoNotes: String? = null
+        logoNotes: String? = null,
+        budgetPerPerson: Double? = null
     ): GiftingOrderResult = withContext(Dispatchers.IO) {
         if (occasion == OccasionType.CORPORATE && logoPath == null) {
             return@withContext GiftingOrderResult.Failed("Corporate orders need a logo")
@@ -97,7 +98,8 @@ class GiftingOrderRepository @Inject constructor(
                     shipByDate = shipByDate.toString(),
                     balanceDueDate = GiftingRules.balanceDueDate(shipByDate).toString(),
                     logoPath = logoPath,
-                    logoNotes = logoNotes?.trim()?.ifBlank { null }
+                    logoNotes = logoNotes?.trim()?.ifBlank { null },
+                    budgetPerPerson = budgetPerPerson.takeIf { occasion == OccasionType.CORPORATE }
                 )
             )
 

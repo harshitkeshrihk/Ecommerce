@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.*
@@ -55,6 +56,7 @@ fun AdminGiftPacksScreen(
     onEditPack: (packId: String?) -> Unit,
     onGiftingOrdersClick: () -> Unit,
     onProductionCalendarClick: () -> Unit,
+    onProposalRequestsClick: () -> Unit,
     viewModel: AdminGiftPacksViewModel = hiltViewModel()
 ) {
     val packs by viewModel.packs.collectAsState()
@@ -76,6 +78,9 @@ fun AdminGiftPacksScreen(
                     }
                     IconButton(onClick = onProductionCalendarClick) {
                         Icon(Icons.Outlined.CalendarMonth, contentDescription = "Production calendar")
+                    }
+                    IconButton(onClick = onProposalRequestsClick) {
+                        Icon(Icons.Outlined.Business, contentDescription = "Corporate proposal requests")
                     }
                 }
             )

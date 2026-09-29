@@ -8,6 +8,7 @@ import com.example.vishnu.model.BudgetTier
 import com.example.vishnu.model.CapacityCalendar
 import com.example.vishnu.model.CapacityCheck
 import com.example.vishnu.model.CapacityOverride
+import com.example.vishnu.model.CorporateProposalRequest
 import com.example.vishnu.model.CapacitySettings
 import com.example.vishnu.model.OPEN_PRODUCTION_STATUSES
 import com.example.vishnu.model.ProductionJob
@@ -20,6 +21,7 @@ import com.example.vishnu.model.GiftingRules
 import com.example.vishnu.model.OccasionType
 import com.example.vishnu.model.Product
 import com.example.vishnu.repository.BrandingRepository
+import com.example.vishnu.repository.CorporateProposalRepository
 import com.example.vishnu.repository.GiftPackRepository
 import com.example.vishnu.repository.GiftingOrderRepository
 import com.example.vishnu.repository.GiftingOrderResult
@@ -157,6 +159,10 @@ class GiftPackBuilderViewModel @Inject constructor(
     val logoUri = MutableStateFlow<Uri?>(null)
     val logoNotes = MutableStateFlow("")
 
+    /** Corporate only: budget per person when the order started from a budget proposal. */
+    private val _budgetPerPerson = MutableStateFlow<Double?>(null)
+    val budgetPerPerson = _budgetPerPerson.asStateFlow()
+
     private val _draft = MutableStateFlow(GiftPackDraft(name = "Custom Gift Pack", sourcePackId = null, lines = emptyList()))
     val draft = _draft.asStateFlow()
 
@@ -228,7 +234,8 @@ class GiftPackBuilderViewModel @Inject constructor(
         val amountNow: Double,
         val occasion: OccasionType,
         val logoPath: String?,
-        val logoNotes: String?
+        val logoNotes: String?,
+        val budgetPerPerson: Double?
     )
 
     private var pendingCheckout: PendingCheckout? = null
@@ -240,9 +247,21 @@ class GiftPackBuilderViewModel @Inject constructor(
         }
     }
 
-    fun load(packId: String?) {
+    /**
+     * [occasion], [packCount] and [budgetPerPerson] prefill the builder when it's
+     * opened from the corporate budget flow (headcount becomes the pack count).
+     */
+    fun load(
+        packId: String?,
+        occasion: OccasionType? = null,
+        packCount: Int? = null,
+        budgetPerPerson: Double? = null
+    ) {
         if (loaded) return
         loaded = true
+        occasion?.let { this.occasion.value = it }
+        packCount?.let { packCountText.value = it.toString() }
+        _budgetPerPerson.value = budgetPerPerson
         viewModelScope.launch {
             _isLoading.value = true
             if (packId != null) {
@@ -350,7 +369,8 @@ class GiftPackBuilderViewModel @Inject constructor(
                 amountNow = payNow!!,
                 occasion = occasion.value,
                 logoPath = logoPath,
-                logoNotes = if (isCorporate) logoNotes.value else null
+                logoNotes = if (isCorporate) logoNotes.value else null,
+                budgetPerPerson = if (isCorporate) _budgetPerPerson.value else null
             )
 
             val user = auth.currentUserOrNull()
@@ -379,7 +399,8 @@ class GiftPackBuilderViewModel @Inject constructor(
                     paymentId = result.paymentId,
                     amountPaid = checkout.amountNow,
                     logoPath = checkout.logoPath,
-                    logoNotes = checkout.logoNotes
+                    logoNotes = checkout.logoNotes,
+                    budgetPerPerson = checkout.budgetPerPerson
                 )) {
                     is GiftingOrderResult.Placed -> _events.emit(BuilderEvent.OrderPlaced(placed.orderId))
                     is GiftingOrderResult.Failed -> _events.emit(BuilderEvent.Message(placed.message))
@@ -387,6 +408,78 @@ class GiftPackBuilderViewModel @Inject constructor(
             }
         }
         _isProcessing.value = false
+    }
+}
+
+// ---------------------------------------------------------------------
+// Customer: corporate gifting — budget proposal + custom requests
+// ---------------------------------------------------------------------
+
+@HiltViewModel
+class CorporateGiftingViewModel @Inject constructor(
+    private val giftPackRepository: GiftPackRepository,
+    private val proposalRepository: CorporateProposalRepository
+) : ViewModel() {
+
+    val budgetText = MutableStateFlow("")
+    val headcountText = MutableStateFlow("")
+
+    private val _packs = MutableStateFlow<List<GiftPack>>(emptyList())
+
+    /** The brief the current proposal was made for; null until "Show gift options". */
+    private val _brief = MutableStateFlow<Pair<Double, Int>?>(null)
+    val brief = _brief.asStateFlow()
+
+    val proposals: StateFlow<List<GiftPack>> = combine(_packs, _brief) { packs, brief ->
+        brief?.let { GiftingRules.proposePacks(packs, it.first) }.orEmpty()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _requests = MutableStateFlow<List<CorporateProposalRequest>>(emptyList())
+    val requests = _requests.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading = _isLoading.asStateFlow()
+
+    private val _messages = MutableSharedFlow<String>()
+    val messages = _messages.asSharedFlow()
+
+    init {
+        viewModelScope.launch {
+            _packs.value = giftPackRepository.getPacks(activeOnly = true)
+            _requests.value = proposalRepository.getRequests()
+            _isLoading.value = false
+        }
+    }
+
+    fun refreshRequests() {
+        viewModelScope.launch { _requests.value = proposalRepository.getRequests() }
+    }
+
+    fun showOptions() {
+        val budget = budgetText.value.toDoubleOrNull()
+        val headcount = headcountText.value.toIntOrNull()
+        viewModelScope.launch {
+            GiftingRules.validateCorporateBrief(budget, headcount)?.let {
+                _messages.emit(it)
+                return@launch
+            }
+            _brief.value = budget!! to headcount!!
+        }
+    }
+
+    fun requestCustomProposal(notes: String) {
+        val brief = _brief.value ?: return
+        viewModelScope.launch {
+            if (notes.isBlank()) {
+                _messages.emit("Tell us what you're looking for")
+                return@launch
+            }
+            val ok = proposalRepository.submitRequest(brief.first, brief.second, notes)
+            _messages.emit(
+                if (ok) "Request sent — we'll prepare a proposal for you" else "Could not send the request. Please try again."
+            )
+            if (ok) refreshRequests()
+        }
     }
 }
 
@@ -678,6 +771,57 @@ fun capacityConflictMessage(conflict: ShipByCapacity.Conflict): String =
     conflict.earliestAvailable?.let {
         "The workshop is fully booked before this date. Earliest available ship-by date: ${it.format(shortDate)}"
     } ?: "The workshop has no free capacity for this many packs. Please contact us."
+
+// ---------------------------------------------------------------------
+// Admin: corporate proposal requests
+// ---------------------------------------------------------------------
+
+@HiltViewModel
+class AdminProposalRequestsViewModel @Inject constructor(
+    private val proposalRepository: CorporateProposalRepository,
+    private val giftPackRepository: GiftPackRepository
+) : ViewModel() {
+
+    private val _requests = MutableStateFlow<List<CorporateProposalRequest>>(emptyList())
+    val requests = _requests.asStateFlow()
+
+    /** All packs, including hidden ones made for a single customer. */
+    private val _packs = MutableStateFlow<List<GiftPack>>(emptyList())
+    val packs = _packs.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading = _isLoading.asStateFlow()
+
+    private val _messages = MutableSharedFlow<String>()
+    val messages = _messages.asSharedFlow()
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            // Open requests first, then newest.
+            _requests.value = proposalRepository.getRequests()
+                .sortedBy { if (it.status == CorporateProposalRequest.OPEN) 0 else 1 }
+            _packs.value = giftPackRepository.getPacks(activeOnly = false)
+            _isLoading.value = false
+        }
+    }
+
+    fun respond(request: CorporateProposalRequest, pack: GiftPack, note: String) {
+        viewModelScope.launch {
+            val ok = proposalRepository.respond(request.id, pack.id, note.trim().ifBlank { null })
+            _messages.emit(if (ok) "Proposal sent to the customer" else "Could not send the proposal")
+            refresh()
+        }
+    }
+
+    fun close(request: CorporateProposalRequest, note: String) {
+        viewModelScope.launch {
+            val ok = proposalRepository.close(request.id, note.trim().ifBlank { null })
+            _messages.emit(if (ok) "Request closed" else "Could not close the request")
+            refresh()
+        }
+    }
+}
 
 // ---------------------------------------------------------------------
 // Admin: production calendar + capacity settings
