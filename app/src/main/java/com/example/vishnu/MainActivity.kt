@@ -206,6 +206,9 @@ fun VishnuCrockeryApp(
                     onGiftingClick = {
                         navController.navigate("gifting_home")
                     },
+                    onCorporateClick = {
+                        navController.navigate("corporate_gifting")
+                    },
                     onCartClick = {
                         navController.navigate("cart")
                     }
@@ -326,13 +329,16 @@ fun VishnuCrockeryApp(
                     onPackClick = { packId -> navController.navigate("gift_pack_builder?packId=$packId") },
                     onBuildOwnClick = { navController.navigate("gift_pack_builder") },
                     onMyOrdersClick = { navController.navigate("my_gifting_orders") },
-                    onCorporateClick = { navController.navigate("corporate_gifting") }
+                    // Gifting ↔ Corporate behave like sibling tabs: swap, don't stack.
+                    onCorporateClick = { navController.switchSection("corporate_gifting", from = "gifting_home") }
                 )
             }
 
             composable("corporate_gifting") {
                 CorporateGiftingScreen(
                     onBack = { navController.popBackStack() },
+                    onGiftingClick = { navController.switchSection("gifting_home", from = "corporate_gifting") },
+                    onMyOrdersClick = { navController.navigate("my_gifting_orders") },
                     onOpenPack = { packId, headcount, budget ->
                         navController.navigate(
                             "gift_pack_builder?packId=$packId&occasion=${OccasionType.CORPORATE.name}" +
@@ -370,7 +376,13 @@ fun VishnuCrockeryApp(
                     reorderOf = args?.getString("reorderOf")?.toLongOrNull(),
                     onBack = { navController.popBackStack() },
                     onInitiatePayment = onInitiatePayment,
-                    onOrderPlaced = { navController.popBackStack("gifting_home", inclusive = false) }
+                    onOrderPlaced = {
+                        // Corporate orders may start from the Corporate section, where
+                        // gifting_home isn't on the back stack — return to the previous screen.
+                        if (!navController.popBackStack("gifting_home", inclusive = false)) {
+                            navController.popBackStack()
+                        }
+                    }
                 )
             }
 
@@ -493,6 +505,14 @@ fun VishnuCrockeryApp(
     }
 }
 private const val REQUESTED_TAB_KEY = "requested_tab"
+
+/** Replaces the current storefront section screen [from] with [route]. */
+private fun NavHostController.switchSection(route: String, from: String) {
+    navigate(route) {
+        popUpTo(from) { inclusive = true }
+        launchSingleTop = true
+    }
+}
 
 /** Returns to the catalog already on the back stack and switches it to [tab]. */
 private fun NavHostController.openCatalogTab(tab: BottomTab) {

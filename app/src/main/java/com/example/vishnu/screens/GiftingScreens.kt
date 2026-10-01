@@ -30,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -107,8 +106,9 @@ fun GiftingHomeScreen(
                     onSectionClick = { section ->
                         when (section) {
                             StoreSection.ALL -> onBack()
-                            // Gifting is this screen; Wholesale / Corporate UI is not designed yet.
-                            StoreSection.GIFTING, StoreSection.WHOLESALE, StoreSection.CORPORATE -> Unit
+                            StoreSection.CORPORATE -> onCorporateClick()
+                            // Gifting is this screen; Wholesale UI is not designed yet.
+                            StoreSection.GIFTING, StoreSection.WHOLESALE -> Unit
                         }
                     }
                 )
@@ -133,14 +133,6 @@ fun GiftingHomeScreen(
                     title = "Build your own pack",
                     subtitle = "Choose any items from the gifting collection",
                     onClick = onBuildOwnClick
-                )
-            }
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                GiftingOptionCard(
-                    icon = Icons.Outlined.Business,
-                    title = "Corporate gifting",
-                    subtitle = "Enter a budget per person and get gift options with your logo",
-                    onClick = onCorporateClick
                 )
             }
             item(span = { GridItemSpan(maxLineSpan) }) {

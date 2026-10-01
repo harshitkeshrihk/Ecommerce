@@ -1,7 +1,29 @@
 package com.example.vishnu.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.vishnu.uicomponents.BrandTopBar
+import com.example.vishnu.uicomponents.StoreSection
+import com.example.vishnu.uicomponents.StoreSectionTabs
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,6 +61,8 @@ typealias OpenCorporateBuilder = (packId: String, headcount: Int, budgetPerPerso
 fun CorporateGiftingScreen(
     onBack: () -> Unit,
     onOpenPack: OpenCorporateBuilder,
+    onGiftingClick: () -> Unit,
+    onMyOrdersClick: () -> Unit,
     viewModel: CorporateGiftingViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -49,95 +73,223 @@ fun CorporateGiftingScreen(
     val requests by viewModel.requests.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     var showRequestDialog by remember { mutableStateOf(false) }
+    var showBriefHint by remember { mutableStateOf(false) }
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    // Grid index of the budget form (tabs, title, branding header, branding cards, packs header).
+    val budgetFormIndex = 4
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
+    LaunchedEffect(brief) { if (brief != null) showBriefHint = false }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Corporate gifting")
-                        Text("Gifts for employees, clients & dealers", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                }
+            BrandTopBar(
+                navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                navigationDescription = "Back",
+                onNavigationClick = onBack,
+                actionIcon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                actionDescription = "My orders",
+                onActionClick = onMyOrdersClick
             )
-        }
-    ) { padding ->
-        LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Text("Tell us your budget", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = budgetText,
-                        onValueChange = { t -> viewModel.budgetText.value = t.filter { it.isDigit() || it == '.' }.take(8) },
-                        label = { Text("Budget per person (₹)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = headcountText,
-                        onValueChange = { t -> viewModel.headcountText.value = t.filter(Char::isDigit).take(6) },
-                        label = { Text("People") },
-                        supportingText = { Text("Min ${GiftingRules.MIN_PACK_COUNT}") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.weight(0.7f)
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = { viewModel.showOptions() }, enabled = !isLoading, modifier = Modifier.fillMaxWidth()) {
-                    Text("Show gift options")
+        },
+        bottomBar = {
+            Column(Modifier.background(MaterialTheme.colorScheme.background)) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Button(
+                    onClick = {
+                        // A custom proposal is always for a budget × headcount brief.
+                        if (brief != null) {
+                            showRequestDialog = true
+                        } else {
+                            showBriefHint = true
+                            scope.launch { gridState.animateScrollToItem(budgetFormIndex) }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Request Custom Proposal", style = MaterialTheme.typography.titleMedium)
                 }
             }
-
-            brief?.let { (budget, headcount) ->
-                item {
+        }
+    ) { padding ->
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Adaptive(150.dp),
+            modifier = Modifier.padding(padding).fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 0 — section tiles
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                StoreSectionTabs(
+                    selected = StoreSection.CORPORATE,
+                    onSectionClick = { section ->
+                        when (section) {
+                            StoreSection.ALL -> onBack()
+                            StoreSection.GIFTING -> onGiftingClick()
+                            // Corporate is this screen; Wholesale UI is not designed yet.
+                            StoreSection.CORPORATE, StoreSection.WHOLESALE -> Unit
+                        }
+                    }
+                )
+            }
+            // 1 — title
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(Modifier.padding(top = 4.dp)) {
+                    Text("Corporate & B2B Solutions", style = MaterialTheme.typography.headlineSmall)
                     Text(
-                        if (proposals.isEmpty()) "No ready-made pack fits ${formatRupees(budget)} per person"
-                        else "${proposals.size} option${if (proposals.size == 1) "" else "s"} within ${formatRupees(budget)} per person",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        "Gifts for employees, clients & dealers",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                items(proposals, key = { it.id }) { pack ->
-                    ProposalCard(pack, budget, headcount, onClick = { onOpenPack(pack.id, headcount, budget) })
+            }
+            // 2 — branding & proofing
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Custom Branding & Proofing", style = MaterialTheme.typography.titleLarge)
+                    Row(
+                        Modifier.height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        BrandingStepCard(
+                            icon = Icons.Outlined.FileUpload,
+                            title = "Upload Brand Logo",
+                            body = "Add your logo & print instructions when you order a pack",
+                            highlighted = false,
+                            onClick = {
+                                scope.launch { gridState.animateScrollToItem(budgetFormIndex) }
+                            },
+                            modifier = Modifier.weight(1f).fillMaxHeight()
+                        )
+                        BrandingStepCard(
+                            icon = Icons.Outlined.Verified,
+                            title = "Proof Branding",
+                            body = "Approve a digital proof before production starts",
+                            highlighted = true,
+                            onClick = onMyOrdersClick,
+                            modifier = Modifier.weight(1f).fillMaxHeight()
+                        )
+                    }
                 }
-                item {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                if (proposals.isEmpty()) "Let us put together a proposal" else "Looking for something different?",
-                                fontWeight = FontWeight.Bold
+            }
+            // 3 — packs header + budget presets
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(Modifier.padding(top = 8.dp)) {
+                    Text("Budget-Tier Gift Packs", style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Presets only fill the budget field — same as typing it.
+                        GiftingRules.BUDGET_TIERS.mapNotNull { it.maxPerPack }.forEach { amount ->
+                            val value = amount.toInt().toString()
+                            FilterChip(
+                                selected = budgetText == value,
+                                onClick = { viewModel.budgetText.value = value },
+                                label = { Text("Up to ${formatRupees(amount)}") },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
                             )
-                            Text(
-                                "Tell us what you have in mind and our team will prepare a custom pack " +
-                                    "for ${formatRupees(budget)} per person × $headcount people.",
-                                style = MaterialTheme.typography.bodySmall
+                        }
+                    }
+                }
+            }
+            // 4 — budget form
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = budgetText,
+                                onValueChange = { t -> viewModel.budgetText.value = t.filter { it.isDigit() || it == '.' }.take(8) },
+                                label = { Text("Budget per person (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
                             )
-                            OutlinedButton(onClick = { showRequestDialog = true }) { Text("Request a custom proposal") }
+                            OutlinedTextField(
+                                value = headcountText,
+                                onValueChange = { t -> viewModel.headcountText.value = t.filter(Char::isDigit).take(6) },
+                                label = { Text("People") },
+                                supportingText = { Text("Min ${GiftingRules.MIN_PACK_COUNT}") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(0.7f)
+                            )
+                        }
+                        if (showBriefHint) {
+                            Text(
+                                "Enter your budget and headcount, then tap Show gift options — " +
+                                    "you can request a custom proposal from there.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.showOptions() },
+                            enabled = !isLoading,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onBackground)
+                        ) {
+                            Text("Show gift options", color = MaterialTheme.colorScheme.onBackground)
                         }
                     }
                 }
             }
 
-            if (requests.isNotEmpty()) {
-                item {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Your proposal requests", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            // Proposals for the current brief
+            brief?.let { (budget, headcount) ->
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        if (proposals.isEmpty()) "No ready-made pack fits ${formatRupees(budget)} per person"
+                        else "${proposals.size} option${if (proposals.size == 1) "" else "s"} within ${formatRupees(budget)} per person",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
-                items(requests, key = { it.id }) { request ->
+                items(proposals, key = { it.id }) { pack ->
+                    ProposalCard(pack, budget, headcount, onClick = { onOpenPack(pack.id, headcount, budget) })
+                }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        (if (proposals.isEmpty()) "Let us put together a proposal — " else "Looking for something different? ") +
+                            "tap Request Custom Proposal and our team will prepare a pack for " +
+                            "${formatRupees(budget)} per person × $headcount people.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (requests.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        "Your proposal requests",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                }
+                items(requests, key = { "request-${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { request ->
                     ProposalRequestCard(
                         request,
                         onOpen = request.proposedPackId?.let { packId ->
@@ -161,53 +313,140 @@ fun CorporateGiftingScreen(
 }
 
 @Composable
+private fun BrandingStepCard(
+    icon: ImageVector,
+    title: String,
+    body: String,
+    highlighted: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val container = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer
+    val content = if (highlighted) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = container,
+        border = if (highlighted) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(30.dp))
+            Spacer(Modifier.height(10.dp))
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = content,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                body,
+                style = MaterialTheme.typography.bodySmall,
+                color = content.copy(alpha = 0.8f),
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
 private fun ProposalCard(pack: GiftPack, budget: Double, headcount: Int, onClick: () -> Unit) {
     val price = pack.toDraft().pricePerPack
-    Card(Modifier.fillMaxWidth().clickable { onClick() }, shape = RoundedCornerShape(12.dp), elevation = CardDefaults.cardElevation(1.dp)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(pack.name, fontWeight = FontWeight.SemiBold)
+    val imageUrl = pack.imageUrl ?: pack.items.firstOrNull()?.product?.imageUrl
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = pack.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1.2f)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            )
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    "${formatRupees(price)} per person · ${formatRupees(budget - price)} under budget",
+                    pack.name,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 17.sp),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    pack.items.joinToString(" · ") { "${it.qty} × ${it.product.name}" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(formatRupees(price), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Custom logo",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Text(
+                    "${formatRupees(budget - price)} under budget",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF2E7D32)
                 )
                 Text(
-                    pack.items.joinToString(" · ") { "${it.qty} × ${it.product.name}" },
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    "Total for $headcount people: ${formatRupees(price * headcount)}",
+                    "Total for $headcount: ${formatRupees(price * headcount)}",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = null)
         }
     }
 }
 
 @Composable
 private fun ProposalRequestCard(request: CorporateProposalRequest, onOpen: (() -> Unit)?) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 "${formatRupees(request.budgetPerPerson)} per person × ${request.headcount} people",
-                fontWeight = FontWeight.SemiBold
+                style = MaterialTheme.typography.titleMedium
             )
-            Text("\"${request.notes}\"", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text(
+                "\"${request.notes}\"",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             when (request.status) {
                 CorporateProposalRequest.OPEN ->
-                    Text("Our team is preparing your proposal", color = Color(0xFFEF6C00), style = MaterialTheme.typography.bodyMedium)
+                    Text("Our team is preparing your proposal", color = Color(0xFFB26A00), style = MaterialTheme.typography.bodyMedium)
                 CorporateProposalRequest.PROPOSED -> {
                     Text("✓ Your proposal is ready", color = Color(0xFF2E7D32), fontWeight = FontWeight.SemiBold)
                     request.adminNote?.let { Text("Note from our team: $it", style = MaterialTheme.typography.bodySmall) }
                     if (onOpen != null) {
-                        Button(onClick = onOpen, modifier = Modifier.fillMaxWidth()) { Text("View proposal & order") }
+                        Button(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+                            Text("View proposal & order")
+                        }
                     }
                 }
                 else -> {
-                    Text("Closed", color = Color.Gray)
+                    Text("Closed", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     request.adminNote?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }
             }
