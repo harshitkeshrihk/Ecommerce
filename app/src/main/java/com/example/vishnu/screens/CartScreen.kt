@@ -1,20 +1,23 @@
 package com.example.vishnu.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.outlined.NorthEast
+import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,41 +27,48 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.vishnu.model.CartItem
+import com.example.vishnu.model.Product
+import com.example.vishnu.uicomponents.BottomTab
+import com.example.vishnu.uicomponents.StoreBottomBar
+import com.example.vishnu.utils.formatRupees
 import com.example.vishnu.viewModels.CartViewModel
+import com.example.vishnu.viewModels.CatalogViewModel
 
-// Define WhatsApp Green Color
-val WhatsAppGreen = Color(0xFF25D366)
+// Tax and shipping are display-only placeholders for now: the amount charged is
+// still CartViewModel.totalPrice, unchanged.
+private const val TAX_AMOUNT = 0.0
+private const val SHIPPING_AMOUNT = 0.0
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CartScreen(
     onBackClick: () -> Unit,
     onInitiatePayment: (amount: Double, email: String, phone: String) -> Unit,
     onProductClick: (String) -> Unit,
-    viewModel: CartViewModel = hiltViewModel()
+    onHomeClick: () -> Unit,
+    onShopClick: () -> Unit,
+    viewModel: CartViewModel = hiltViewModel(),
+    // Read-only: supplies the product list for "You might also like".
+    catalogViewModel: CatalogViewModel = hiltViewModel()
 ) {
     val cartItems by viewModel.cartItems.collectAsState()
     val totalPrice by viewModel.totalPrice.collectAsState()
     val email by viewModel.userEmail.collectAsState()
     val phone by viewModel.userPhone.collectAsState()
+    val allProducts by catalogViewModel.products.collectAsState()
     val context = LocalContext.current
 
     val cartEvent = viewModel.cartEvent.collectAsState(initial = null)
-
-//    LaunchedEffect(Unit) {
-//        viewModel.fetchCartItems()
-//    }
 
     LaunchedEffect(cartEvent.value) {
         when(val event = cartEvent.value) {
@@ -74,34 +84,44 @@ fun CartScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "My Cart",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+    // Suggestions: available products not already in the cart, same categories first.
+    val suggestions = remember(cartItems, allProducts) {
+        val inCart = cartItems.map { it.product.id }.toSet()
+        val cartCategories = cartItems.map { it.product.category }.toSet()
+        allProducts
+            .filter { it.id !in inCart && it.isAvailable }
+            .sortedWith(
+                compareByDescending<Product> { it.category in cartCategories }
+                    .thenByDescending { it.isBestseller }
             )
-        },
+            .take(8)
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { CartHeader(onBackClick = onBackClick) },
         bottomBar = {
-            if (cartItems.isNotEmpty()) {
-                CartSummaryBottomBar(
-                    totalPrice = totalPrice,
-                    onCheckout = { onInitiatePayment(totalPrice,email,phone) }
+            Column(Modifier.background(MaterialTheme.colorScheme.background)) {
+                if (cartItems.isNotEmpty()) {
+                    CartSummary(
+                        subtotal = totalPrice,
+                        total = totalPrice,
+                        onCheckout = { onInitiatePayment(totalPrice, email, phone) }
+                    )
+                }
+                StoreBottomBar(
+                    selected = BottomTab.CART,
+                    onTabClick = { tab ->
+                        when (tab) {
+                            BottomTab.HOME -> onHomeClick()
+                            BottomTab.SHOP -> onShopClick()
+                            // Saved screen is not designed yet; Cart is this screen.
+                            BottomTab.SAVED, BottomTab.CART -> Unit
+                        }
+                    }
                 )
             }
-        },
-        containerColor = MaterialTheme.colorScheme.background
+        }
     ) { padding ->
         if (cartItems.isEmpty()) {
             EmptyCartState(
@@ -113,18 +133,29 @@ fun CartScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                items(cartItems) { item ->
-                    CartItemCard(
+                items(cartItems, key = { it.product.id }) { item ->
+                    CartLineItem(
                         item = item,
                         onRemove = { viewModel.removeFromCart(item.product.id) },
-                        // Ideally, add onIncrease/onDecrease in your ViewModel later
                         onIncrease = { viewModel.increaseQty(item) },
                         onDecrease = { viewModel.decreaseQty(item) },
-                        onItemClick = {onProductClick(item.product.id)}
+                        onItemClick = { onProductClick(item.product.id) }
                     )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                }
+                if (suggestions.isNotEmpty()) {
+                    item {
+                        YouMightAlsoLike(
+                            products = suggestions,
+                            onProductClick = onProductClick,
+                            onSeeAllClick = onShopClick
+                        )
+                    }
                 }
             }
         }
@@ -132,102 +163,101 @@ fun CartScreen(
 }
 
 @Composable
-fun CartItemCard(
+private fun CartHeader(onBackClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .height(56.dp)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        IconButton(onClick = onBackClick, modifier = Modifier.align(Alignment.CenterStart)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        }
+        Text(
+            text = "CART",
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 2.sp
+            )
+        )
+    }
+}
+
+@Composable
+private fun CartLineItem(
     item: CartItem,
     onRemove: () -> Unit,
     onIncrease: () -> Unit,
     onDecrease: () -> Unit,
-    onItemClick: () -> Unit, // <--- You have this, let's use it!
+    onItemClick: () -> Unit
 ) {
-    ElevatedCard(
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth()
-        // OPTION A: Make the whole card clickable (simplest, but risky for buttons)
-        // .clickable { onItemClick() }
+    val product = item.product
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 16.dp)
     ) {
-        Row(
+        AsyncImage(
+            model = product.imageUrl,
+            contentDescription = product.name,
+            contentScale = ContentScale.Crop,
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // --- CHANGE START: Wrapper for Clickable Area ---
-            // We wrap the Image and Text in a Row and make THAT clickable.
-            // This leaves the Delete button and Quantity controls OUTSIDE the click area.
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null // Removes ripple if you want clean look, or keep it
-                    ) { onItemClick() }, // <--- NAVIGATE HERE
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 1. Product Image
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.size(90.dp)
+                .size(84.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable { onItemClick() }
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clickable { onItemClick() }
                 ) {
-                    AsyncImage(
-                        model = item.product.imageUrl,
-                        contentDescription = item.product.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                // 2. Info Column
-                Column(modifier = Modifier.weight(1f)) {
-                    // Title
                     Text(
-                        text = item.product.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        text = product.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Price
-                    Text(
-                        text = "₹${item.product.priceRetail.toInt()}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    val details = listOfNotNull(product.material, product.gauge, product.weight)
+                        .joinToString(" · ")
+                    if (details.isNotEmpty()) {
+                        Text(
+                            text = details,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Remove",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            // --- CHANGE END ---
-
-            // 3. Right Side Actions (Delete & Quantity)
-            // These are OUTSIDE the clickable Row above, so they won't trigger navigation.
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.height(90.dp) // Match image height to space out nicely
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Delete Button
-                IconButton(
-                    onClick = onRemove,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Remove",
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
-                    )
-                }
-
-                // Quantity Selector
-                QuantitySelector(
-                    quantity = item.quantity,
-                    onIncrease = onIncrease,
-                    onDecrease = onDecrease
+                QuantityStepper(item.quantity, onIncrease = onIncrease, onDecrease = onDecrease)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = formatRupees(product.priceRetail * item.quantity),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -235,7 +265,7 @@ fun CartItemCard(
 }
 
 @Composable
-fun QuantitySelector(
+private fun QuantityStepper(
     quantity: Int,
     onIncrease: () -> Unit,
     onDecrease: () -> Unit
@@ -243,108 +273,167 @@ fun QuantitySelector(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .background(
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(8.dp)
-            )
             .height(32.dp)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
     ) {
-        IconButton(
-            onClick = onDecrease,
-            modifier = Modifier.size(32.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Remove,
-                contentDescription = "Decrease",
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSecondaryContainer
-            )
+        IconButton(onClick = onDecrease, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Remove, contentDescription = "Decrease", modifier = Modifier.size(14.dp))
         }
-
         Text(
             text = "$quantity",
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 4.dp),
-            color = MaterialTheme.colorScheme.onSecondaryContainer
+            modifier = Modifier.widthIn(min = 20.dp),
+            textAlign = TextAlign.Center
         )
+        IconButton(onClick = onIncrease, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Add, contentDescription = "Increase", modifier = Modifier.size(14.dp))
+        }
+    }
+}
 
-        IconButton(
-            onClick = onIncrease,
-            modifier = Modifier.size(32.dp)
+@Composable
+private fun YouMightAlsoLike(
+    products: List<Product>,
+    onProductClick: (String) -> Unit,
+    onSeeAllClick: () -> Unit
+) {
+    Column(Modifier.padding(top = 20.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Increase",
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            Text(
+                "YOU MIGHT ALSO LIKE",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.6.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                "See all",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier
+                    .clickable { onSeeAllClick() }
+                    .padding(4.dp)
             )
         }
-    }
-}
-
-@Composable
-fun CartSummaryBottomBar(
-    totalPrice: Double,
-    onCheckout: () -> Unit
-) {
-    Surface(
-        shadowElevation = 16.dp,
-        tonalElevation = 2.dp,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        color = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(24.dp)
-                .navigationBarsPadding() // Handles gesture navigation overlap
+        Spacer(Modifier.height(12.dp))
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Total Amount",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "₹${totalPrice.toInt()}",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Button(
-                onClick = onCheckout,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = WhatsAppGreen),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                // You can add a WhatsApp icon here if you have the resource
-                Icon(
-                    imageVector = Icons.Default.ShoppingBag, // Placeholder for WhatsApp Icon
-                    contentDescription = null,
-                    tint = Color.White
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Buy Now",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+            items(products, key = { it.id }) { product ->
+                Surface(
+                    onClick = { onProductClick(product.id) },
+                    modifier = Modifier.width(140.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    shadowElevation = 1.dp
+                ) {
+                    Column {
+                        AsyncImage(
+                            model = product.imageUrl,
+                            contentDescription = product.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(110.dp)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        )
+                        Row(
+                            Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    product.name.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    formatRupees(product.priceRetail),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                Icons.Outlined.NorthEast,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun EmptyCartState(
+private fun CartSummary(
+    subtotal: Double,
+    total: Double,
+    onCheckout: () -> Unit
+) {
+    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp)) {
+        SummaryRow("Subtotal", formatRupees(subtotal))
+        SummaryRow("Tax", formatRupees(TAX_AMOUNT))
+        SummaryRow("Shipping", if (SHIPPING_AMOUNT == 0.0) "Free" else formatRupees(SHIPPING_AMOUNT))
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "TOTAL",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            Text(formatRupees(total), style = MaterialTheme.typography.titleLarge)
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = onCheckout,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            shape = RoundedCornerShape(4.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        ) {
+            Text("PROCEED TO CHECKOUT", style = MaterialTheme.typography.labelLarge, letterSpacing = 1.sp)
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(label: String, value: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp)
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun EmptyCartState(
     modifier: Modifier = Modifier,
     onStartShopping: () -> Unit
 ) {
@@ -354,41 +443,41 @@ fun EmptyCartState(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier.padding(32.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.ShoppingBag,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(100.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-                    .padding(24.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(96.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Outlined.ShoppingBag,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            Text("Your cart is empty", style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(8.dp))
             Text(
-                text = "Your Cart is Empty!",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Looks like you haven't added anything yet.",
-                style = MaterialTheme.typography.bodyLarge,
+                "Looks like you haven't added anything yet.",
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
+            Spacer(Modifier.height(28.dp))
             OutlinedButton(
                 onClick = onStartShopping,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(4.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onBackground)
             ) {
-                Text("Start Shopping")
+                Text(
+                    "START SHOPPING",
+                    style = MaterialTheme.typography.labelLarge,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
             }
         }
     }

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -66,6 +67,9 @@ fun CatalogScreen(
     onProfileClick: () -> Unit,
     onGiftingClick: () -> Unit,
     onCartClick: () -> Unit,
+    // Set when another screen (e.g. Cart's bottom bar) asks for a specific tab.
+    requestedTab: BottomTab? = null,
+    onRequestedTabHandled: () -> Unit = {},
     viewModel: CatalogViewModel = hiltViewModel()
 ) {
     val products by viewModel.filteredProducts.collectAsState()
@@ -74,6 +78,15 @@ fun CatalogScreen(
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val location by viewModel.userLocation.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val allProducts by viewModel.products.collectAsState()
+
+    var activeTab by rememberSaveable { mutableStateOf(BottomTab.HOME) }
+    LaunchedEffect(requestedTab) {
+        if (requestedTab == BottomTab.HOME || requestedTab == BottomTab.SHOP) {
+            activeTab = requestedTab
+        }
+        if (requestedTab != null) onRequestedTabHandled()
+    }
 
     // UI Logic: We are in "Search Mode" if the query is not empty
     val isSearching = searchQuery.isNotEmpty()
@@ -84,6 +97,10 @@ fun CatalogScreen(
     // If searching, Back button clears search. If not, it does default action (exits app).
     BackHandler(enabled = isSearching) {
         viewModel.onSearchQueryChange("")
+    }
+    // Back from the Shop tab returns to Home instead of leaving the app.
+    BackHandler(enabled = activeTab == BottomTab.SHOP) {
+        activeTab = BottomTab.HOME
     }
 
     val locationPermissionState = rememberPermissionState(
@@ -129,28 +146,41 @@ fun CatalogScreen(
                     actionDescription = "Go to Cart",
                     onActionClick = onCartClick
                 )
-                ActiveSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { viewModel.onSearchQueryChange(it) },
-                    isSearching = isSearching,
-                    onBackClick = { viewModel.onSearchQueryChange("") } // Back arrow action
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                if (activeTab == BottomTab.HOME) {
+                    ActiveSearchBar(
+                        query = searchQuery,
+                        onQueryChange = { viewModel.onSearchQueryChange(it) },
+                        isSearching = isSearching,
+                        onBackClick = { viewModel.onSearchQueryChange("") } // Back arrow action
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             }
         },
         bottomBar = {
             StoreBottomBar(
-                selected = BottomTab.HOME,
+                selected = activeTab,
                 onTabClick = { tab ->
                     when (tab) {
+                        BottomTab.HOME, BottomTab.SHOP -> activeTab = tab
                         BottomTab.CART -> onCartClick()
-                        // Shop / Saved screens are not designed yet.
-                        BottomTab.HOME, BottomTab.SHOP, BottomTab.SAVED -> Unit
+                        // Saved screen is not designed yet.
+                        BottomTab.SAVED -> Unit
                     }
                 }
             )
         }
     ) { paddingValues ->
+        if (activeTab == BottomTab.SHOP) {
+            ShopContent(
+                products = allProducts,
+                isLoading = isLoading,
+                onProductClick = onProductClick,
+                onAddToCart = { viewModel.addToCart(it) },
+                modifier = Modifier.padding(paddingValues)
+            )
+            return@Scaffold
+        }
         LazyVerticalGrid(
             state = gridState,
             columns = GridCells.Adaptive(160.dp),

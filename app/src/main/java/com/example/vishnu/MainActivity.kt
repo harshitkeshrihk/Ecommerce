@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -54,6 +55,7 @@ import com.example.vishnu.screens.WholesaleHomeScreen
 import com.example.vishnu.model.UserRole
 import com.example.vishnu.screens.ProfileScreen
 import com.example.vishnu.ui.theme.VishnuTheme
+import com.example.vishnu.uicomponents.BottomTab
 import com.example.vishnu.utils.DataStoreManager
 import com.example.vishnu.utils.PaymentPurpose
 import com.example.vishnu.utils.PaymentResult
@@ -186,9 +188,15 @@ fun VishnuCrockeryApp(
                 AuthScreen(viewModel = authViewModel) // Pass the SAME instance
             }
             // Screen 1: Catalog
-            composable("catalog") {
+            composable("catalog") { backStackEntry ->
+                // Cart's bottom bar can ask for Home / Shop when it pops back here.
+                val requestedTab by backStackEntry.savedStateHandle
+                    .getStateFlow<String?>(REQUESTED_TAB_KEY, null)
+                    .collectAsState()
                 // Cart is reached from the header cart icon and the bottom bar.
                 CatalogScreen(
+                    requestedTab = requestedTab?.let { name -> BottomTab.entries.firstOrNull { it.name == name } },
+                    onRequestedTabHandled = { backStackEntry.savedStateHandle[REQUESTED_TAB_KEY] = null },
                     onProductClick = { productId ->
                         navController.navigate("detail/$productId")
                     },
@@ -224,8 +232,10 @@ fun VishnuCrockeryApp(
                     onBackClick = { navController.popBackStack() },
                     onInitiatePayment = onInitiatePayment,
                     onProductClick = { productId ->
-                       navController.navigate("detail/{productId}")
-                    }
+                       navController.navigate("detail/$productId")
+                    },
+                    onHomeClick = { navController.openCatalogTab(BottomTab.HOME) },
+                    onShopClick = { navController.openCatalogTab(BottomTab.SHOP) }
                 )
             }
 
@@ -482,6 +492,19 @@ fun VishnuCrockeryApp(
         }
     }
 }
+private const val REQUESTED_TAB_KEY = "requested_tab"
+
+/** Returns to the catalog already on the back stack and switches it to [tab]. */
+private fun NavHostController.openCatalogTab(tab: BottomTab) {
+    val catalogEntry = runCatching { getBackStackEntry("catalog") }.getOrNull()
+    if (catalogEntry != null) {
+        catalogEntry.savedStateHandle[REQUESTED_TAB_KEY] = tab.name
+        popBackStack("catalog", inclusive = false)
+    } else {
+        popBackStack()
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
