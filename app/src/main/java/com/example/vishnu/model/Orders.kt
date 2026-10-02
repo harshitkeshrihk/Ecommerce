@@ -11,7 +11,8 @@ data class OrderRequest(
     @SerialName("shipping_address") val address: String,
     @SerialName("store_id") val storeId: String,
     val status: String = "PAID",
-    val channel: String = "retail" // retail | wholesale — set by CartRepository.createOrder
+    val channel: String = "retail", // retail | wholesale — set by CartRepository.createOrder
+    val gstin: String? = null // optional buyer GSTIN, snapshotted per order (wholesale checkout)
 )
 
 // 2. Get this back to know the new Order ID (e.g., 105)

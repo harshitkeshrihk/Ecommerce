@@ -24,7 +24,8 @@ class QuickOrderRepository @Inject constructor(
     suspend fun placeOrder(
         lines: List<RfqDraftLine>,
         resolvedUnitPrices: Map<String, Double>, // productId -> unit price
-        shippingAddress: String
+        shippingAddress: String,
+        gstin: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
         val userId = currentUser.userId() ?: return@withContext false
         if (lines.isEmpty()) return@withContext false
@@ -43,7 +44,8 @@ class QuickOrderRepository @Inject constructor(
                     address = shippingAddress,
                     storeId = storeId,
                     status = "CONFIRMED",
-                    channel = "wholesale"
+                    channel = "wholesale",
+                    gstin = gstin
                 )
             )
 

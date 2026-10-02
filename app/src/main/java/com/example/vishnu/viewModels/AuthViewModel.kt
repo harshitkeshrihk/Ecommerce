@@ -34,7 +34,6 @@ class AuthViewModel @Inject constructor(
     sealed class AuthDestination {
         object AdminDashboard : AuthDestination()
         object Catalog : AuthDestination()
-        object WholesaleHome : AuthDestination()
     }
 
     private val _navigationEvent = MutableSharedFlow<AuthDestination>()
@@ -72,7 +71,6 @@ class AuthViewModel @Inject constructor(
 
                 when (role) {
                     UserRole.ADMIN -> _navigationEvent.emit(AuthDestination.AdminDashboard)
-                    UserRole.WHOLESALE, UserRole.DISTRIBUTOR -> _navigationEvent.emit(AuthDestination.WholesaleHome)
                     else -> _navigationEvent.emit(AuthDestination.Catalog)
                 }
 

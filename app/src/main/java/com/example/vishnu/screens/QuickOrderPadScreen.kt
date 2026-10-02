@@ -20,6 +20,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.vishnu.model.PriceSource
 import com.example.vishnu.model.Product
 import com.example.vishnu.model.ResolvedPrice
+import com.example.vishnu.uicomponents.GstinCheckoutDialog
 import com.example.vishnu.utils.BUSINESS_WHATSAPP_NUMBER
 import com.example.vishnu.utils.shareOrderSummaryOnWhatsApp
 import com.example.vishnu.viewModels.QuickOrderViewModel
@@ -35,6 +36,9 @@ fun QuickOrderPadScreen(
     val resolvedPrices by viewModel.resolvedPrices.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isPlacingOrder by viewModel.isPlacingOrder.collectAsState()
+    val isBusinessBuyer by viewModel.isBusinessBuyer.collectAsState()
+    val gstinPrefill by viewModel.gstinPrefill.collectAsState()
+    var showCheckout by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -42,6 +46,9 @@ fun QuickOrderPadScreen(
             when (event) {
                 is QuickOrderViewModel.QuickOrderEvent.Placed -> {
                     shareOrderSummaryOnWhatsApp(context, event.summaryText, BUSINESS_WHATSAPP_NUMBER)
+                }
+                is QuickOrderViewModel.QuickOrderEvent.RfqSent -> {
+                    android.widget.Toast.makeText(context, "Request sent. We'll quote you shortly.", android.widget.Toast.LENGTH_SHORT).show()
                 }
                 is QuickOrderViewModel.QuickOrderEvent.Failed -> {
                     android.widget.Toast.makeText(context, event.message, android.widget.Toast.LENGTH_SHORT).show()
@@ -68,22 +75,44 @@ fun QuickOrderPadScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text("$itemCount item(s)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text("₹${total.toInt()}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            if (isBusinessBuyer == false) {
+                                Text(
+                                    "Business account prices. Send as a quote request, or apply in Profile.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
                         }
+                        Spacer(Modifier.width(12.dp))
                         Button(
-                            onClick = { viewModel.placeOrder() },
-                            enabled = !isPlacingOrder
+                            onClick = {
+                                if (isBusinessBuyer == true) showCheckout = true else viewModel.requestQuote()
+                            },
+                            enabled = !isPlacingOrder && isBusinessBuyer != null
                         ) {
                             if (isPlacingOrder) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-                            else Text("Place Order")
+                            else Text(if (isBusinessBuyer == false) "Request Quote" else "Place Order")
                         }
                     }
                 }
             }
         }
     ) { padding ->
+        if (showCheckout) {
+            GstinCheckoutDialog(
+                title = "Confirm Quick Order",
+                total = total,
+                prefill = gstinPrefill,
+                onConfirm = { gstin ->
+                    showCheckout = false
+                    viewModel.placeOrder(gstin)
+                },
+                onDismiss = { showCheckout = false }
+            )
+        }
         if (isLoading) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()

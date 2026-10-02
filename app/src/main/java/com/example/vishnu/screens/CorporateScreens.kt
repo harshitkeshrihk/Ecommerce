@@ -62,6 +62,7 @@ fun CorporateGiftingScreen(
     onBack: () -> Unit,
     onOpenPack: OpenCorporateBuilder,
     onGiftingClick: () -> Unit,
+    onWholesaleClick: () -> Unit,
     onMyOrdersClick: () -> Unit,
     viewModel: CorporateGiftingViewModel = hiltViewModel()
 ) {
@@ -136,8 +137,8 @@ fun CorporateGiftingScreen(
                         when (section) {
                             StoreSection.ALL -> onBack()
                             StoreSection.GIFTING -> onGiftingClick()
-                            // Corporate is this screen; Wholesale UI is not designed yet.
-                            StoreSection.CORPORATE, StoreSection.WHOLESALE -> Unit
+                            StoreSection.WHOLESALE -> onWholesaleClick()
+                            StoreSection.CORPORATE -> Unit
                         }
                     }
                 )

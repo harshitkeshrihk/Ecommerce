@@ -2,14 +2,18 @@ package com.example.vishnu.viewModels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.vishnu.model.PriceSource
+import com.example.vishnu.model.GstinPrefill
 import com.example.vishnu.model.Product
 import com.example.vishnu.model.ResolvedPrice
 import com.example.vishnu.model.RfqDraftLine
+import com.example.vishnu.model.gstinPrefill
+import com.example.vishnu.model.isBusinessBuyer
 import com.example.vishnu.repository.PricingRepository
 import com.example.vishnu.repository.ProductRepository
 import com.example.vishnu.repository.ProfileRepository
 import com.example.vishnu.repository.QuickOrderRepository
+import com.example.vishnu.repository.RfqRepository
+import com.example.vishnu.repository.RfqSubmitResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +31,8 @@ class QuickOrderViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val pricingRepository: PricingRepository,
     private val quickOrderRepository: QuickOrderRepository,
-    private val profileRepository: ProfileRepository
+    private val profileRepository: ProfileRepository,
+    private val rfqRepository: RfqRepository
 ) : ViewModel() {
 
     private val _products = MutableStateFlow<List<Product>>(emptyList())
@@ -47,8 +52,18 @@ class QuickOrderViewModel @Inject constructor(
     private val _isPlacingOrder = MutableStateFlow(false)
     val isPlacingOrder = _isPlacingOrder.asStateFlow()
 
+    // Everyone sees slab prices; only approved business accounts can order at
+    // them. Read fresh from the profile, not the login-time DataStore role, so
+    // a KYC approval applies without signing out. Null until loaded.
+    private val _isBusinessBuyer = MutableStateFlow<Boolean?>(null)
+    val isBusinessBuyer = _isBusinessBuyer.asStateFlow()
+
+    private val _gstinPrefill = MutableStateFlow(GstinPrefill("", locked = false))
+    val gstinPrefill = _gstinPrefill.asStateFlow()
+
     sealed class QuickOrderEvent {
         data class Placed(val summaryText: String) : QuickOrderEvent()
+        object RfqSent : QuickOrderEvent()
         data class Failed(val message: String) : QuickOrderEvent()
     }
 
@@ -73,6 +88,11 @@ class QuickOrderViewModel @Inject constructor(
             _products.value = productRepository.getAllProducts()
             _isLoading.value = false
         }
+        viewModelScope.launch {
+            val profile = profileRepository.getUserProfile()
+            _gstinPrefill.value = profile.gstinPrefill()
+            _isBusinessBuyer.value = profile.isBusinessBuyer()
+        }
     }
 
     fun setQuantity(product: Product, qty: Int) {
@@ -82,6 +102,8 @@ class QuickOrderViewModel @Inject constructor(
         }
         if (safeQty > 0) {
             viewModelScope.launch {
+                // Slab prices are shown to every visitor (as a preview for
+                // non-business accounts); placeOrder is what's role-gated.
                 val resolved = pricingRepository.resolvePricing(product, safeQty, isWholesaleBuyer = true)
                 // Rapid qty changes fire overlapping resolvePricing calls with
                 // no guaranteed completion order. Only apply this result if
@@ -102,16 +124,16 @@ class QuickOrderViewModel @Inject constructor(
             .map { RfqDraftLine(it, qtyMap[it.id]!!) }
     }
 
-    fun placeOrder() {
+    fun placeOrder(gstin: String?) {
         val lines = draftLines()
-        if (lines.isEmpty()) return
+        if (lines.isEmpty() || _isBusinessBuyer.value != true) return
         viewModelScope.launch {
             _isPlacingOrder.value = true
             val profile = profileRepository.getUserProfile()
             val address = profile?.address ?: "Address not provided"
             val priceMap = _resolvedPrices.value.mapValues { it.value.unitPrice }
 
-            val success = quickOrderRepository.placeOrder(lines, priceMap, address)
+            val success = quickOrderRepository.placeOrder(lines, priceMap, address, gstin)
             if (success) {
                 val summary = com.example.vishnu.utils.buildOrderSummaryText(
                     orderLabel = "Quick Order",
@@ -120,13 +142,32 @@ class QuickOrderViewModel @Inject constructor(
                             it.product.name, it.qty, priceMap[it.product.id] ?: it.product.priceWholesale
                         )
                     },
-                    total = totalAmount.value
+                    total = totalAmount.value,
+                    gstin = gstin
                 )
                 _events.emit(QuickOrderEvent.Placed(summary))
                 _quantities.value = emptyMap()
                 _resolvedPrices.value = emptyMap()
             } else {
                 _events.emit(QuickOrderEvent.Failed("Could not place order. Please try again."))
+            }
+            _isPlacingOrder.value = false
+        }
+    }
+
+    /** For accounts without wholesale access: send the pad as a quote request instead. */
+    fun requestQuote() {
+        val lines = draftLines()
+        if (lines.isEmpty()) return
+        viewModelScope.launch {
+            _isPlacingOrder.value = true
+            when (val result = rfqRepository.submitRfq(lines, neededByDate = null, notes = "Sent from the Quick-Order Pad")) {
+                is RfqSubmitResult.Success -> {
+                    _events.emit(QuickOrderEvent.RfqSent)
+                    _quantities.value = emptyMap()
+                    _resolvedPrices.value = emptyMap()
+                }
+                is RfqSubmitResult.Error -> _events.emit(QuickOrderEvent.Failed(result.message))
             }
             _isPlacingOrder.value = false
         }

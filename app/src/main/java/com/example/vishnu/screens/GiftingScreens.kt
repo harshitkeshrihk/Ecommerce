@@ -74,6 +74,7 @@ fun GiftingHomeScreen(
     onBuildOwnClick: () -> Unit,
     onMyOrdersClick: () -> Unit,
     onCorporateClick: () -> Unit,
+    onWholesaleClick: () -> Unit,
     viewModel: GiftingHomeViewModel = hiltViewModel()
 ) {
     val packs by viewModel.visiblePacks.collectAsState()
@@ -107,8 +108,8 @@ fun GiftingHomeScreen(
                         when (section) {
                             StoreSection.ALL -> onBack()
                             StoreSection.CORPORATE -> onCorporateClick()
-                            // Gifting is this screen; Wholesale UI is not designed yet.
-                            StoreSection.GIFTING, StoreSection.WHOLESALE -> Unit
+                            StoreSection.WHOLESALE -> onWholesaleClick()
+                            StoreSection.GIFTING -> Unit
                         }
                     }
                 )

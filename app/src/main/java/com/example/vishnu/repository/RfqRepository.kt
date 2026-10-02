@@ -77,7 +77,7 @@ class RfqRepository @Inject constructor(
      * §00/§02: settlement against the printed/WhatsApp order summary happens
      * outside the app, on the terms recorded on the quote.
      */
-    suspend fun acceptQuote(rfq: Rfq, quote: Quote, shippingAddress: String): Boolean =
+    suspend fun acceptQuote(rfq: Rfq, quote: Quote, shippingAddress: String, gstin: String? = null): Boolean =
         withContext(Dispatchers.IO) {
             val userId = auth.currentUserOrNull()?.id ?: return@withContext false
             try {
@@ -98,7 +98,8 @@ class RfqRepository @Inject constructor(
                             address = shippingAddress,
                             storeId = storeId,
                             status = "CONFIRMED",
-                            channel = "wholesale"
+                            channel = "wholesale",
+                            gstin = gstin
                         )
                     ) { select() }
                     .decodeSingle<OrderResponse>()

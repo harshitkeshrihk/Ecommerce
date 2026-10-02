@@ -18,7 +18,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.vishnu.model.Quote
 import com.example.vishnu.model.Rfq
+import com.example.vishnu.uicomponents.GstinCheckoutDialog
 import com.example.vishnu.utils.BUSINESS_WHATSAPP_NUMBER
 import com.example.vishnu.utils.shareOrderSummaryOnWhatsApp
 import com.example.vishnu.viewModels.RfqViewModel
@@ -128,6 +130,21 @@ fun NewRfqTab(viewModel: RfqViewModel) {
 @Composable
 fun MyRfqsTab(viewModel: RfqViewModel) {
     val rfqs by viewModel.myRfqs.collectAsState()
+    val gstinPrefill by viewModel.gstinPrefill.collectAsState()
+    var accepting by remember { mutableStateOf<Pair<Rfq, Quote>?>(null) }
+
+    accepting?.let { (rfq, quote) ->
+        GstinCheckoutDialog(
+            title = "Accept Quote",
+            total = rfq.items.sumOf { it.qty * (quote.priceFor(it.id) ?: 0.0) },
+            prefill = gstinPrefill,
+            onConfirm = { gstin ->
+                accepting = null
+                viewModel.acceptQuote(rfq, quote, gstin)
+            },
+            onDismiss = { accepting = null }
+        )
+    }
 
     if (rfqs.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -136,14 +153,14 @@ fun MyRfqsTab(viewModel: RfqViewModel) {
     } else {
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             items(rfqs) { rfq ->
-                RfqCard(rfq = rfq, onAcceptQuote = { quote -> viewModel.acceptQuote(rfq, quote) })
+                RfqCard(rfq = rfq, onAcceptQuote = { quote -> accepting = rfq to quote })
             }
         }
     }
 }
 
 @Composable
-fun RfqCard(rfq: Rfq, onAcceptQuote: (com.example.vishnu.model.Quote) -> Unit) {
+fun RfqCard(rfq: Rfq, onAcceptQuote: (Quote) -> Unit) {
     val (statusColor, statusBg) = when (rfq.status) {
         "won" -> Color(0xFF4CAF50) to Color(0xFFE8F5E9)
         "lost" -> Color(0xFFF44336) to Color(0xFFFFEBEE)

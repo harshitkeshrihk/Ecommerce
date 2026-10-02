@@ -67,6 +67,7 @@ fun CatalogScreen(
     onProfileClick: () -> Unit,
     onGiftingClick: () -> Unit,
     onCorporateClick: () -> Unit,
+    onWholesaleClick: () -> Unit,
     onCartClick: () -> Unit,
     // Set when another screen (e.g. Cart's bottom bar) asks for a specific tab.
     requestedTab: BottomTab? = null,
@@ -222,8 +223,8 @@ fun CatalogScreen(
                             when (section) {
                                 StoreSection.GIFTING -> onGiftingClick()
                                 StoreSection.CORPORATE -> onCorporateClick()
-                                // Wholesale UI is not designed yet.
-                                StoreSection.ALL, StoreSection.WHOLESALE -> Unit
+                                StoreSection.WHOLESALE -> onWholesaleClick()
+                                StoreSection.ALL -> Unit
                             }
                         },
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp)

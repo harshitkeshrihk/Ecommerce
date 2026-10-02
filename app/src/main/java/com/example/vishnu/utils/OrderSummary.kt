@@ -17,7 +17,12 @@ const val BUSINESS_WHATSAPP_NUMBER = "919839633958"
  * defers GST invoicing (Doc 4 §00/§02), so this is never labeled or formatted
  * as a tax invoice.
  */
-fun buildOrderSummaryText(orderLabel: String, lines: List<OrderSummaryLine>, total: Double): String {
+fun buildOrderSummaryText(
+    orderLabel: String,
+    lines: List<OrderSummaryLine>,
+    total: Double,
+    gstin: String? = null
+): String {
     val itemLines = lines.joinToString("\n") { line ->
         "▪ ${line.productName} (x${line.qty}) - ₹${(line.unitPrice * line.qty).toInt()}"
     }
@@ -29,7 +34,7 @@ fun buildOrderSummaryText(orderLabel: String, lines: List<OrderSummaryLine>, tot
 
         ----------------
         💰 *Total: ₹${total.toInt()}*
-    """.trimIndent()
+    """.trimIndent() + (gstin?.let { "\nBuyer GSTIN: $it" } ?: "")
 }
 
 fun shareOrderSummaryOnWhatsApp(context: Context, summaryText: String, phoneNumber: String? = null) {

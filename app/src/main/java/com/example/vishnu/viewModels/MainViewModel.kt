@@ -36,7 +36,8 @@ class MainViewModel @Inject constructor(
             _startDestination.value = if (dataStoreManager.isLoggedIn.first()) {
                 when (dataStoreManager.role.first()) {
                     UserRole.ADMIN -> "admin_dashboard"
-                    UserRole.WHOLESALE, UserRole.DISTRIBUTOR -> "wholesale_home"
+                    // Wholesale/distributor accounts share the retail home;
+                    // wholesale is a section of it.
                     else -> "catalog"
                 }
             } else {

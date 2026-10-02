@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.vishnu.model.Order
 import com.example.vishnu.model.OrderItemDetail
 import com.example.vishnu.repository.ProfileRepository
+import com.example.vishnu.utils.isValidGstin
+import com.example.vishnu.utils.normalizeGstin
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.postgrest.query.Order as SupabaseOrder
 import kotlinx.coroutines.async
@@ -79,8 +81,15 @@ class ProfileViewModel @Inject constructor(
                 _kycSubmitStatus.value = "GSTIN and business name are required."
                 return@launch
             }
+            // Validated here because this GSTIN is later pre-filled onto
+            // wholesale orders, whose gstin column has a format check.
+            val gstin = normalizeGstin(kycGstin.value)
+            if (!isValidGstin(gstin)) {
+                _kycSubmitStatus.value = "Enter a valid 15-character GSTIN."
+                return@launch
+            }
             _isLoading.value = true
-            val success = repository.submitKycApplication(kycRole.value, kycGstin.value, kycBusinessName.value)
+            val success = repository.submitKycApplication(kycRole.value, gstin, kycBusinessName.value)
             _kycSubmitStatus.value = if (success) {
                 _kycStatus.value = "pending"
                 "Application submitted. We'll review it shortly."

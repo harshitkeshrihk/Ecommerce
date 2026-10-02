@@ -38,6 +38,19 @@ class PricingRepository @Inject constructor(
         }
     }
 
+    /** Every product's slabs in one query, keyed by product id, highest min_qty first. */
+    suspend fun getAllSlabs(): Map<String, List<MoqSlab>> = withContext(Dispatchers.IO) {
+        try {
+            postgrest["moq_slabs"]
+                .select { order("min_qty", order = SupabaseOrder.DESCENDING) }
+                .decodeList<MoqSlab>()
+                .groupBy { it.productId }
+        } catch (e: Exception) {
+            Log.e("PricingRepo", "Error fetching MOQ slabs", e)
+            emptyMap()
+        }
+    }
+
     suspend fun addSlab(productId: String, minQty: Int, pricePerUnit: Double): Boolean =
         withContext(Dispatchers.IO) {
             try {

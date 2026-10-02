@@ -51,7 +51,7 @@ import com.example.vishnu.screens.KycQueueScreen
 import com.example.vishnu.screens.ProductDetailScreen
 import com.example.vishnu.screens.QuickOrderPadScreen
 import com.example.vishnu.screens.RfqScreen
-import com.example.vishnu.screens.WholesaleHomeScreen
+import com.example.vishnu.screens.WholesaleScreen
 import com.example.vishnu.model.UserRole
 import com.example.vishnu.screens.ProfileScreen
 import com.example.vishnu.ui.theme.VishnuTheme
@@ -176,11 +176,6 @@ fun VishnuCrockeryApp(
                                     popUpTo("auth_screen") { inclusive = true }
                                 }
                             }
-                            is AuthViewModel.AuthDestination.WholesaleHome -> {
-                                navController.navigate("wholesale_home") {
-                                    popUpTo("auth_screen") { inclusive = true }
-                                }
-                            }
                         }
                     }
                 }
@@ -208,6 +203,9 @@ fun VishnuCrockeryApp(
                     },
                     onCorporateClick = {
                         navController.navigate("corporate_gifting")
+                    },
+                    onWholesaleClick = {
+                        navController.navigate("wholesale")
                     },
                     onCartClick = {
                         navController.navigate("cart")
@@ -310,14 +308,17 @@ fun VishnuCrockeryApp(
                 }
             }
 
-            // --- Wholesale / Distributor ---
+            // --- Wholesale — a storefront section for every signed-in user ---
 
-            composable("wholesale_home") {
-                WholesaleHomeScreen(
+            composable("wholesale") {
+                WholesaleScreen(
+                    onBack = { navController.popBackStack() },
+                    onGiftingClick = { navController.switchSection("gifting_home", from = "wholesale") },
+                    onCorporateClick = { navController.switchSection("corporate_gifting", from = "wholesale") },
                     onQuickOrderClick = { navController.navigate("quick_order_pad") },
                     onRequestQuoteClick = { navController.navigate("rfq_screen") },
-                    onGiftingClick = { navController.navigate("gifting_home") },
-                    onProfileClick = { navController.navigate("profile") }
+                    onProductClick = { productId -> navController.navigate("detail/$productId") },
+                    onApplyClick = { navController.navigate("profile") }
                 )
             }
 
@@ -329,8 +330,9 @@ fun VishnuCrockeryApp(
                     onPackClick = { packId -> navController.navigate("gift_pack_builder?packId=$packId") },
                     onBuildOwnClick = { navController.navigate("gift_pack_builder") },
                     onMyOrdersClick = { navController.navigate("my_gifting_orders") },
-                    // Gifting ↔ Corporate behave like sibling tabs: swap, don't stack.
-                    onCorporateClick = { navController.switchSection("corporate_gifting", from = "gifting_home") }
+                    // Section screens behave like sibling tabs: swap, don't stack.
+                    onCorporateClick = { navController.switchSection("corporate_gifting", from = "gifting_home") },
+                    onWholesaleClick = { navController.switchSection("wholesale", from = "gifting_home") }
                 )
             }
 
@@ -338,6 +340,7 @@ fun VishnuCrockeryApp(
                 CorporateGiftingScreen(
                     onBack = { navController.popBackStack() },
                     onGiftingClick = { navController.switchSection("gifting_home", from = "corporate_gifting") },
+                    onWholesaleClick = { navController.switchSection("wholesale", from = "corporate_gifting") },
                     onMyOrdersClick = { navController.navigate("my_gifting_orders") },
                     onOpenPack = { packId, headcount, budget ->
                         navController.navigate(

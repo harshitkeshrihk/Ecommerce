@@ -2,10 +2,12 @@ package com.example.vishnu.viewModels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vishnu.model.GstinPrefill
 import com.example.vishnu.model.Product
 import com.example.vishnu.model.Quote
 import com.example.vishnu.model.Rfq
 import com.example.vishnu.model.RfqDraftLine
+import com.example.vishnu.model.gstinPrefill
 import com.example.vishnu.repository.ProductRepository
 import com.example.vishnu.repository.ProfileRepository
 import com.example.vishnu.repository.RfqRepository
@@ -43,6 +45,9 @@ class RfqViewModel @Inject constructor(
     private val _isSubmitting = MutableStateFlow(false)
     val isSubmitting = _isSubmitting.asStateFlow()
 
+    private val _gstinPrefill = MutableStateFlow(GstinPrefill("", locked = false))
+    val gstinPrefill = _gstinPrefill.asStateFlow()
+
     sealed class RfqEvent {
         object Submitted : RfqEvent()
         data class Error(val message: String) : RfqEvent()
@@ -59,6 +64,9 @@ class RfqViewModel @Inject constructor(
             _isLoading.value = false
         }
         loadMyRfqs()
+        viewModelScope.launch {
+            _gstinPrefill.value = profileRepository.getUserProfile().gstinPrefill()
+        }
     }
 
     fun setQuantity(product: Product, qty: Int) {
@@ -98,18 +106,19 @@ class RfqViewModel @Inject constructor(
         }
     }
 
-    fun acceptQuote(rfq: Rfq, quote: Quote) {
+    fun acceptQuote(rfq: Rfq, quote: Quote, gstin: String?) {
         viewModelScope.launch {
             val profile = profileRepository.getUserProfile()
             val address = profile?.address ?: "Address not provided"
-            val success = rfqRepository.acceptQuote(rfq, quote, address)
+            val success = rfqRepository.acceptQuote(rfq, quote, address, gstin)
             if (success) {
                 val summary = com.example.vishnu.utils.buildOrderSummaryText(
                     orderLabel = "RFQ ${rfq.id.take(8)}",
                     lines = rfq.items.map {
                         com.example.vishnu.utils.OrderSummaryLine(it.product.name, it.qty, quote.priceFor(it.id) ?: 0.0)
                     },
-                    total = rfq.items.sumOf { it.qty * (quote.priceFor(it.id) ?: 0.0) }
+                    total = rfq.items.sumOf { it.qty * (quote.priceFor(it.id) ?: 0.0) },
+                    gstin = gstin
                 )
                 _events.emit(RfqEvent.OrderConfirmed(summary))
                 loadMyRfqs()

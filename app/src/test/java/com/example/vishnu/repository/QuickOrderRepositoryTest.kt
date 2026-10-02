@@ -4,6 +4,7 @@ import com.example.vishnu.model.RfqDraftLine
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -34,6 +35,15 @@ class QuickOrderRepositoryTest {
         assertTrue(orderDb.items.all { it.orderId == orderId })
         assertEquals(80.0, orderDb.items.single { it.productId == "thali" }.price, 0.0)
         assertEquals(270.0, orderDb.items.single { it.productId == "jug" }.price, 0.0)
+    }
+
+    @Test
+    fun `stores the GSTIN on the order only when one is given`() = runTest {
+        repo.placeOrder(listOf(RfqDraftLine(thali, 1)), emptyMap(), "addr", gstin = "27AAPFU0939F1ZV")
+        repo.placeOrder(listOf(RfqDraftLine(thali, 1)), emptyMap(), "addr")
+
+        assertEquals("27AAPFU0939F1ZV", orderDb.orders[0].second.gstin)
+        assertNull(orderDb.orders[1].second.gstin)
     }
 
     @Test
