@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavType
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -221,7 +222,7 @@ fun VishnuCrockeryApp(
                 val productId = backStackEntry.arguments?.getString("productId") ?: "1"
                 ProductDetailScreen(
                     productId = productId,
-                    onBackClick = { navController.popBackStack()},
+                    onBackClick = { navController.popBackSafely()},
                     onEditClick = {
                         navController.navigate("add_edit_product?productId=${productId}")
                     }
@@ -230,7 +231,7 @@ fun VishnuCrockeryApp(
 
             composable("cart") {
                 CartScreen(
-                    onBackClick = { navController.popBackStack() },
+                    onBackClick = { navController.popBackSafely() },
                     onInitiatePayment = onInitiatePayment,
                     onProductClick = { productId ->
                        navController.navigate("detail/$productId")
@@ -253,7 +254,7 @@ fun VishnuCrockeryApp(
                         }
                     },
                     onBackClick = {
-                        navController.popBackStack()
+                        navController.popBackSafely()
                     }
                 )
             }
@@ -294,7 +295,7 @@ fun VishnuCrockeryApp(
                         navController.navigate("catalog") { popUpTo("kyc_queue") { inclusive = true } }
                     }
                 } else {
-                    KycQueueScreen(onBack = { navController.popBackStack() })
+                    KycQueueScreen(onBack = { navController.popBackSafely() })
                 }
             }
 
@@ -304,7 +305,7 @@ fun VishnuCrockeryApp(
                         navController.navigate("catalog") { popUpTo("admin_quote_pipeline") { inclusive = true } }
                     }
                 } else {
-                    AdminQuotePipelineScreen(onBack = { navController.popBackStack() })
+                    AdminQuotePipelineScreen(onBack = { navController.popBackSafely() })
                 }
             }
 
@@ -312,7 +313,7 @@ fun VishnuCrockeryApp(
 
             composable("wholesale") {
                 WholesaleScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popBackSafely() },
                     onGiftingClick = { navController.switchSection("gifting_home", from = "wholesale") },
                     onCorporateClick = { navController.switchSection("corporate_gifting", from = "wholesale") },
                     onQuickOrderClick = { navController.navigate("quick_order_pad") },
@@ -326,7 +327,7 @@ fun VishnuCrockeryApp(
 
             composable("gifting_home") {
                 GiftingHomeScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popBackSafely() },
                     onPackClick = { packId -> navController.navigate("gift_pack_builder?packId=$packId") },
                     onBuildOwnClick = { navController.navigate("gift_pack_builder") },
                     onMyOrdersClick = { navController.navigate("my_gifting_orders") },
@@ -338,7 +339,7 @@ fun VishnuCrockeryApp(
 
             composable("corporate_gifting") {
                 CorporateGiftingScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popBackSafely() },
                     onGiftingClick = { navController.switchSection("gifting_home", from = "corporate_gifting") },
                     onWholesaleClick = { navController.switchSection("wholesale", from = "corporate_gifting") },
                     onMyOrdersClick = { navController.navigate("my_gifting_orders") },
@@ -353,7 +354,7 @@ fun VishnuCrockeryApp(
 
             composable("my_gifting_orders") {
                 MyGiftingOrdersScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popBackSafely() },
                     onInitiatePayment = onInitiatePayment,
                     onReorder = { orderId -> navController.navigate("gift_pack_builder?reorderOf=$orderId") }
                 )
@@ -377,13 +378,13 @@ fun VishnuCrockeryApp(
                     initialPackCount = args?.getString("packs")?.toIntOrNull(),
                     budgetPerPerson = args?.getString("budget")?.toDoubleOrNull(),
                     reorderOf = args?.getString("reorderOf")?.toLongOrNull(),
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.popBackSafely() },
                     onInitiatePayment = onInitiatePayment,
                     onOrderPlaced = {
                         // Corporate orders may start from the Corporate section, where
                         // gifting_home isn't on the back stack — return to the previous screen.
                         if (!navController.popBackStack("gifting_home", inclusive = false)) {
-                            navController.popBackStack()
+                            navController.popBackSafely()
                         }
                     }
                 )
@@ -396,7 +397,7 @@ fun VishnuCrockeryApp(
                     }
                 } else {
                     AdminGiftPacksScreen(
-                        onBack = { navController.popBackStack() },
+                        onBack = { navController.popBackSafely() },
                         onEditPack = { packId ->
                             navController.navigate(
                                 if (packId == null) "admin_gift_pack_edit" else "admin_gift_pack_edit?packId=$packId"
@@ -422,7 +423,7 @@ fun VishnuCrockeryApp(
                 } else {
                     AdminGiftPackEditScreen(
                         packId = backStackEntry.arguments?.getString("packId"),
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackSafely() }
                     )
                 }
             }
@@ -433,7 +434,7 @@ fun VishnuCrockeryApp(
                         navController.navigate("catalog") { popUpTo("admin_gifting_orders") { inclusive = true } }
                     }
                 } else {
-                    AdminGiftingOrdersScreen(onBack = { navController.popBackStack() })
+                    AdminGiftingOrdersScreen(onBack = { navController.popBackSafely() })
                 }
             }
 
@@ -444,7 +445,7 @@ fun VishnuCrockeryApp(
                     }
                 } else {
                     AdminProposalRequestsScreen(
-                        onBack = { navController.popBackStack() },
+                        onBack = { navController.popBackSafely() },
                         onCreatePack = { navController.navigate("admin_gift_pack_edit") }
                     )
                 }
@@ -457,7 +458,7 @@ fun VishnuCrockeryApp(
                     }
                 } else {
                     AdminProductionCalendarScreen(
-                        onBack = { navController.popBackStack() },
+                        onBack = { navController.popBackSafely() },
                         onCapacitySettingsClick = { navController.navigate("admin_capacity_settings") }
                     )
                 }
@@ -469,16 +470,16 @@ fun VishnuCrockeryApp(
                         navController.navigate("catalog") { popUpTo("admin_capacity_settings") { inclusive = true } }
                     }
                 } else {
-                    AdminCapacitySettingsScreen(onBack = { navController.popBackStack() })
+                    AdminCapacitySettingsScreen(onBack = { navController.popBackSafely() })
                 }
             }
 
             composable("quick_order_pad") {
-                QuickOrderPadScreen(onBack = { navController.popBackStack() })
+                QuickOrderPadScreen(onBack = { navController.popBackSafely() })
             }
 
             composable("rfq_screen") {
-                RfqScreen(onBack = { navController.popBackStack() })
+                RfqScreen(onBack = { navController.popBackSafely() })
             }
 
             composable(
@@ -499,7 +500,7 @@ fun VishnuCrockeryApp(
                     AddEditProductScreen(
                         productId = backStackEntry.arguments?.getString("productId"),
                         storeId = backStackEntry.arguments?.getString("storeId"),
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackSafely() }
                     )
                 }
             }
@@ -508,6 +509,19 @@ fun VishnuCrockeryApp(
     }
 }
 private const val REQUESTED_TAB_KEY = "requested_tab"
+
+/**
+ * Back-arrow pop that ignores repeat taps. While a pop's exit transition runs,
+ * the old screen is still drawn and clickable; a second popBackStack() then
+ * pops the screen underneath too — from the catalog (the root) that empties
+ * the back stack and leaves a blank screen. The destination being returned to
+ * only reaches RESUMED once the transition ends, so only the first tap pops.
+ */
+private fun NavHostController.popBackSafely() {
+    if (currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
+        popBackStack()
+    }
+}
 
 /** Replaces the current storefront section screen [from] with [route]. */
 private fun NavHostController.switchSection(route: String, from: String) {
